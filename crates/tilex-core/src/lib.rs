@@ -5,4 +5,7 @@
 
 pub mod geometry;
 
+#[cfg(windows)]
+pub mod platform;
+
 pub use geometry::{Axis, Direction, Rect};
