@@ -3,7 +3,15 @@
 fn main() {
     #[cfg(windows)]
     {
-        use tilex_core::platform::enumerate_manageable;
+        use tilex_core::platform::{enumerate_manageable, enumerate_monitors};
+
+        for monitor in enumerate_monitors() {
+            println!(
+                "monitor {} bounds {:?} work {:?} dpi {} primary {}",
+                monitor.id, monitor.bounds, monitor.work_area, monitor.dpi, monitor.is_primary
+            );
+        }
+        println!();
 
         for window in enumerate_manageable() {
             let rect = window.frame_rect();
