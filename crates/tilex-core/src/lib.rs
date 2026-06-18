@@ -4,8 +4,10 @@
 //! and exposes a small command/event surface for the shell to drive.
 
 pub mod geometry;
+pub mod layout;
 
 #[cfg(windows)]
 pub mod platform;
 
 pub use geometry::{Axis, Direction, Rect};
+pub use layout::{LayoutKind, LayoutOptions};
