@@ -1,9 +1,13 @@
 //! Win32 bindings. Nothing above this module talks to windows-rs directly.
 
+pub mod events;
+pub mod hotkey;
 pub mod monitor;
 pub mod util;
 pub mod window;
 
+pub use events::{DesktopEvent, EventHooks};
+pub use hotkey::{FailedBinding, HotkeyRegistry};
 pub use monitor::{
     cursor_position, enumerate_monitors, monitor_at, monitor_for_window, monitor_under_cursor,
     primary_monitor, Monitor, MonitorId,
