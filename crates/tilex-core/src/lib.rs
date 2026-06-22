@@ -8,6 +8,8 @@ pub mod config;
 pub mod geometry;
 pub mod hotkey;
 pub mod layout;
+pub mod manager;
+pub mod navigate;
 
 #[cfg(windows)]
 pub mod platform;
