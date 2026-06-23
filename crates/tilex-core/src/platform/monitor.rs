@@ -3,6 +3,8 @@
 //! Layouts are always computed against the *work area* so the taskbar and any
 //! other appbar keeps its space.
 
+use serde::{Deserialize, Serialize};
+
 use crate::geometry::Rect;
 use crate::platform::util::wide_to_string;
 use crate::platform::window::NativeWindow;
@@ -21,7 +23,7 @@ use windows::Win32::UI::WindowsAndMessaging::{GetCursorPos, MONITORINFOF_PRIMARY
 /// `HMONITOR` values are recycled when the display topology changes, so the
 /// device name (`\\.\DISPLAY1`) is what actually keeps a workspace attached to
 /// the right screen.
-#[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
 pub struct MonitorId(pub String);
 
 impl std::fmt::Display for MonitorId {

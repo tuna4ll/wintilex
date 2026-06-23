@@ -13,7 +13,7 @@ impl LayoutAlgorithm for MainStack {
     fn arrange(&self, ctx: &LayoutContext) -> Arrangement {
         let area = ctx.area;
         if ctx.count == 1 {
-            return Arrangement { tiles: vec![area], splits: Vec::new() };
+            return Arrangement { tiles: vec![area], splits: Vec::new(), gap: 0 };
         }
 
         let axis = area.preferred_split_axis();
@@ -64,7 +64,7 @@ impl LayoutAlgorithm for MainStack {
             second: if ctx.options.reversed { (0, 1) } else { (1, ctx.count) },
         }];
 
-        Arrangement { tiles, splits }
+        Arrangement { tiles, splits, gap: 0 }
     }
 }
 

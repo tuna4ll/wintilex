@@ -21,9 +21,10 @@ use serde::{Deserialize, Serialize};
 
 use crate::geometry::{Axis, Rect};
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default, Serialize, Deserialize)]
 #[serde(rename_all = "kebab-case")]
 pub enum LayoutKind {
+    #[default]
     Bsp,
     Columns,
     Rows,
@@ -64,12 +65,6 @@ impl LayoutKind {
         let all = Self::ALL;
         let index = all.iter().position(|k| *k == self).unwrap_or(0);
         all[(index + 1) % all.len()]
-    }
-}
-
-impl Default for LayoutKind {
-    fn default() -> Self {
-        LayoutKind::Bsp
     }
 }
 
@@ -198,6 +193,9 @@ pub struct Arrangement {
     pub tiles: Vec<Rect>,
     /// Boundaries between tiles, in no particular order.
     pub splits: Vec<SplitEdge>,
+    /// The inner gap already taken off `tiles`, kept so the ungapped edges can
+    /// be recovered when a drag has to be matched against a split.
+    pub gap: i32,
 }
 
 impl Arrangement {
@@ -209,8 +207,15 @@ impl Arrangement {
             for tile in &mut self.tiles {
                 *tile = tile.inset(half);
             }
+            self.gap = gap;
         }
         self
+    }
+
+    /// A tile as the layout produced it, before the gap was taken off. Split
+    /// positions are expressed in these coordinates.
+    pub fn raw_tile(&self, index: usize) -> Option<Rect> {
+        self.tiles.get(index).map(|tile| tile.inset(-(self.gap / 2)))
     }
 
     /// The split whose boundary matches `position` on `axis` and that has

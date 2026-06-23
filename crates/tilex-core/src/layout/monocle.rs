@@ -10,6 +10,6 @@ impl LayoutAlgorithm for Monocle {
     }
 
     fn arrange(&self, ctx: &LayoutContext) -> Arrangement {
-        Arrangement { tiles: vec![ctx.area; ctx.count], splits: Vec::new() }
+        Arrangement { tiles: vec![ctx.area; ctx.count], splits: Vec::new(), gap: 0 }
     }
 }

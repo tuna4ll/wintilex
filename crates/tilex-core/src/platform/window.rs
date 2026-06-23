@@ -14,7 +14,7 @@ use windows::Win32::System::Threading::{
 use windows::Win32::UI::WindowsAndMessaging::{
     EnumWindows, GetAncestor, GetClassNameW, GetForegroundWindow, GetWindowLongPtrW, GetWindowRect,
     GetWindowTextW, GetWindowThreadProcessId, IsIconic, IsWindow, IsWindowVisible, IsZoomed,
-    SetForegroundWindow, SetWindowPos, ShowWindow, GA_ROOTOWNER, GWL_EXSTYLE, GWL_STYLE,
+    SetCursorPos, SetForegroundWindow, SetWindowPos, ShowWindow, GA_ROOTOWNER, GWL_EXSTYLE, GWL_STYLE,
     HWND_BOTTOM, HWND_TOP, SET_WINDOW_POS_FLAGS, SWP_ASYNCWINDOWPOS, SWP_NOACTIVATE,
     SWP_NOCOPYBITS, SWP_NOMOVE, SWP_NOSENDCHANGING, SWP_NOSIZE, SWP_NOZORDER, SW_MINIMIZE,
     SW_RESTORE, SW_SHOWMAXIMIZED, SW_SHOWNOACTIVATE, WS_CAPTION, WS_CHILD, WS_DISABLED,
@@ -336,10 +336,9 @@ impl NativeWindow {
 
             let mut attached = Vec::new();
             for thread in [foreground_thread, target_thread] {
-                if thread != 0 && thread != current_thread && !attached.contains(&thread) {
-                    if AttachThreadInput(current_thread, thread, true).as_bool() {
-                        attached.push(thread);
-                    }
+                let usable = thread != 0 && thread != current_thread && !attached.contains(&thread);
+                if usable && AttachThreadInput(current_thread, thread, true).as_bool() {
+                    attached.push(thread);
                 }
             }
 
@@ -440,4 +439,11 @@ unsafe extern "system" fn enum_proc(hwnd: HWND, lparam: LPARAM) -> windows::core
     let collected = unsafe { &mut *(lparam.0 as *mut Vec<NativeWindow>) };
     collected.push(NativeWindow(hwnd));
     TRUE
+}
+
+/// Put the pointer somewhere. Used by the optional focus-warping setting.
+pub fn warp_cursor(x: i32, y: i32) {
+    unsafe {
+        let _ = SetCursorPos(x, y);
+    }
 }

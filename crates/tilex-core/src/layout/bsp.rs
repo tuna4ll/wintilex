@@ -32,6 +32,7 @@ impl LayoutAlgorithm for Bsp {
         let mut result = Arrangement {
             tiles: vec![Rect::ZERO; ctx.count],
             splits: Vec::with_capacity(ctx.count.saturating_sub(1)),
+            gap: 0,
         };
         split(ctx, ctx.area, 0, ctx.count, ROOT_KEY, &mut result);
         result

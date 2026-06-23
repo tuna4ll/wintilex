@@ -76,7 +76,7 @@ fn stripe(ctx: &LayoutContext, axis: Axis) -> Arrangement {
         tiles.push(tile);
     }
 
-    Arrangement { tiles, splits }
+    Arrangement { tiles, splits, gap: 0 }
 }
 
 #[cfg(test)]
