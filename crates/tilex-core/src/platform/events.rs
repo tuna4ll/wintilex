@@ -112,10 +112,12 @@ impl Drop for EventHooks {
 /// the window procedure rather than an accessibility event.
 pub fn push_event(event: DesktopEvent) {
     QUEUE.with(|queue| queue.borrow_mut().push_back(event));
-    wake_owner_thread();
+    wake_hook_thread();
 }
 
-fn wake_owner_thread() {
+/// Wake the hook thread so it drains its queues. Also used by the keyboard
+/// hook, which lives on the same thread.
+pub fn wake_hook_thread() {
     let thread = OWNER_THREAD.with(|owner| *owner.borrow());
     if thread != 0 {
         unsafe {
@@ -164,5 +166,5 @@ unsafe extern "system" fn callback(
         queue.push_back(translated);
     });
 
-    wake_owner_thread();
+    wake_hook_thread();
 }
