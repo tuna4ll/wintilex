@@ -46,6 +46,22 @@ pub struct General {
     pub warp_cursor_to_focus: bool,
     /// Fold a manual drag-resize back into the layout instead of undoing it.
     pub absorb_manual_resize: bool,
+    /// How global hotkeys are captured.
+    pub hotkey_backend: HotkeyBackend,
+}
+
+/// Which mechanism Tilex uses to grab its hotkeys.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum HotkeyBackend {
+    /// A low-level keyboard hook. Sees the key before the shell does, which is
+    /// the only way to bind combinations Windows reserves for itself such as
+    /// `Win+H` or `Win+Tab`.
+    #[default]
+    Hook,
+    /// `RegisterHotKey`. Less invasive, but Windows refuses most `Win+letter`
+    /// combinations.
+    System,
 }
 
 impl Default for General {
@@ -57,6 +73,7 @@ impl Default for General {
             focus_follows_mouse: false,
             warp_cursor_to_focus: false,
             absorb_manual_resize: true,
+            hotkey_backend: HotkeyBackend::default(),
         }
     }
 }
