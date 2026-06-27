@@ -3,7 +3,9 @@ dist/
 .vite/
 *.local
 
-src-tauri/target/
+target/
+Cargo.lock
+
 src-tauri/gen/
 
 .DS_Store
@@ -11,4 +13,3 @@ Thumbs.db
 .vscode/*
 !.vscode/extensions.json
 .idea/
-Cargo.lock
