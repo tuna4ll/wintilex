@@ -12,8 +12,7 @@ use crate::platform::window::NativeWindow;
 use windows::Win32::Foundation::{LPARAM, POINT, RECT, TRUE};
 use windows::Win32::Graphics::Gdi::{
     EnumDisplayMonitors, GetMonitorInfoW, MonitorFromPoint, MonitorFromWindow, HDC, HMONITOR,
-    MONITORINFO, MONITORINFOEXW, MONITOR_DEFAULTTONEAREST,
-    MONITOR_DEFAULTTOPRIMARY,
+    MONITORINFO, MONITORINFOEXW, MONITOR_DEFAULTTONEAREST, MONITOR_DEFAULTTOPRIMARY,
 };
 use windows::Win32::UI::HiDpi::{GetDpiForMonitor, MDT_EFFECTIVE_DPI};
 use windows::Win32::UI::WindowsAndMessaging::{GetCursorPos, MONITORINFOF_PRIMARY};
@@ -114,7 +113,8 @@ fn monitor_from_handle(handle: HMONITOR) -> Option<Monitor> {
         ..Default::default()
     };
 
-    let ok = unsafe { GetMonitorInfoW(handle, &mut info as *mut MONITORINFOEXW as *mut MONITORINFO) };
+    let ok =
+        unsafe { GetMonitorInfoW(handle, &mut info as *mut MONITORINFOEXW as *mut MONITORINFO) };
     if !ok.as_bool() {
         return None;
     }
@@ -160,4 +160,3 @@ impl Monitor {
         HMONITOR(self.handle as *mut std::ffi::c_void)
     }
 }
-

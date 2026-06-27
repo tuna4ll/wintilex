@@ -153,8 +153,8 @@ impl WindowManager {
             return DragOutcome::Swapped;
         }
 
-        let moved = (end.x - start.x).abs() > EDGE_TOLERANCE
-            || (end.y - start.y).abs() > EDGE_TOLERANCE;
+        let moved =
+            (end.x - start.x).abs() > EDGE_TOLERANCE || (end.y - start.y).abs() > EDGE_TOLERANCE;
         if !moved {
             return DragOutcome::Ignored;
         }

@@ -14,8 +14,8 @@ use windows::Win32::System::Threading::{
 use windows::Win32::UI::WindowsAndMessaging::{
     EnumWindows, GetAncestor, GetClassNameW, GetForegroundWindow, GetWindowLongPtrW, GetWindowRect,
     GetWindowTextW, GetWindowThreadProcessId, IsIconic, IsWindow, IsWindowVisible, IsZoomed,
-    SetCursorPos, SetForegroundWindow, SetWindowPos, ShowWindow, GA_ROOTOWNER, GWL_EXSTYLE, GWL_STYLE,
-    HWND_BOTTOM, HWND_TOP, SET_WINDOW_POS_FLAGS, SWP_ASYNCWINDOWPOS, SWP_NOACTIVATE,
+    SetCursorPos, SetForegroundWindow, SetWindowPos, ShowWindow, GA_ROOTOWNER, GWL_EXSTYLE,
+    GWL_STYLE, HWND_BOTTOM, HWND_TOP, SET_WINDOW_POS_FLAGS, SWP_ASYNCWINDOWPOS, SWP_NOACTIVATE,
     SWP_NOCOPYBITS, SWP_NOMOVE, SWP_NOSENDCHANGING, SWP_NOSIZE, SWP_NOZORDER, SW_MINIMIZE,
     SW_RESTORE, SW_SHOWMAXIMIZED, SW_SHOWNOACTIVATE, WS_CAPTION, WS_CHILD, WS_DISABLED,
     WS_EX_APPWINDOW, WS_EX_NOACTIVATE, WS_EX_TOOLWINDOW,
@@ -286,19 +286,27 @@ impl NativeWindow {
     }
 
     pub fn minimize(&self) {
-        unsafe { let _ = ShowWindow(self.0, SW_MINIMIZE); };
+        unsafe {
+            let _ = ShowWindow(self.0, SW_MINIMIZE);
+        };
     }
 
     pub fn restore(&self) {
-        unsafe { let _ = ShowWindow(self.0, SW_RESTORE); };
+        unsafe {
+            let _ = ShowWindow(self.0, SW_RESTORE);
+        };
     }
 
     pub fn maximize(&self) {
-        unsafe { let _ = ShowWindow(self.0, SW_SHOWMAXIMIZED); };
+        unsafe {
+            let _ = ShowWindow(self.0, SW_SHOWMAXIMIZED);
+        };
     }
 
     pub fn show_no_activate(&self) {
-        unsafe { let _ = ShowWindow(self.0, SW_SHOWNOACTIVATE); };
+        unsafe {
+            let _ = ShowWindow(self.0, SW_SHOWNOACTIVATE);
+        };
     }
 
     pub fn raise(&self) {
@@ -410,20 +418,15 @@ impl NativeWindow {
 pub fn enumerate_windows() -> Vec<NativeWindow> {
     let mut windows: Vec<NativeWindow> = Vec::with_capacity(64);
     unsafe {
-        let _ = EnumWindows(
-            Some(enum_proc),
-            LPARAM(&mut windows as *mut Vec<NativeWindow> as isize),
-        );
+        let _ =
+            EnumWindows(Some(enum_proc), LPARAM(&mut windows as *mut Vec<NativeWindow> as isize));
     }
     windows
 }
 
 /// Every window Tilex is willing to manage.
 pub fn enumerate_manageable() -> Vec<NativeWindow> {
-    enumerate_windows()
-        .into_iter()
-        .filter(|w| w.is_manageable())
-        .collect()
+    enumerate_windows().into_iter().filter(|w| w.is_manageable()).collect()
 }
 
 pub fn foreground_window() -> Option<NativeWindow> {

@@ -251,8 +251,7 @@ mod tests {
 
     #[test]
     fn a_partial_file_keeps_the_rest_of_the_defaults() {
-        let parsed: Config =
-            serde_json::from_str(r#"{"layout":"columns","gap":16}"#).unwrap();
+        let parsed: Config = serde_json::from_str(r#"{"layout":"columns","gap":16}"#).unwrap();
         assert_eq!(parsed.layout, LayoutKind::Columns);
         assert_eq!(parsed.layout_options.gap, 16);
         assert_eq!(parsed.layout_options.outer_gap, LayoutOptions::default().outer_gap);

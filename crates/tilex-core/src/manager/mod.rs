@@ -287,7 +287,8 @@ impl WindowManager {
         options.reversed = workspace.reversed;
         let area = workspace.monitor.work_area;
 
-        let arrangement = arrange(algorithm.as_ref(), area, tiled.len(), &options, &workspace.ratios);
+        let arrangement =
+            arrange(algorithm.as_ref(), area, tiled.len(), &options, &workspace.ratios);
 
         for (position, id) in tiled.iter().enumerate() {
             let Some(tile) = arrangement.tiles.get(position).copied() else {
@@ -583,9 +584,7 @@ impl WindowManager {
                 workspace.remove(focused);
             }
             self.centre_floating(focused, &monitor);
-        } else if let Some(index) =
-            self.workspaces.iter().position(|w| w.monitor.id == monitor)
-        {
+        } else if let Some(index) = self.workspaces.iter().position(|w| w.monitor.id == monitor) {
             self.workspaces[index].insert(focused, None);
         }
         true

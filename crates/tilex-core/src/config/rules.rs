@@ -140,11 +140,8 @@ mod tests {
     #[test]
     fn empty_and_disabled_rules_never_match() {
         assert!(!WindowRule::default().matches(facts("a.exe", "C", "t")));
-        let rule = WindowRule {
-            process: Some("a.exe".into()),
-            disabled: true,
-            ..Default::default()
-        };
+        let rule =
+            WindowRule { process: Some("a.exe".into()), disabled: true, ..Default::default() };
         assert!(!rule.matches(facts("a.exe", "C", "t")));
     }
 

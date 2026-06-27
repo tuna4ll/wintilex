@@ -7,10 +7,8 @@ fn main() {
     {
         use tilex_core::{config::Config, manager::Engine};
 
-        let seconds: u64 = std::env::args()
-            .nth(1)
-            .and_then(|value| value.parse().ok())
-            .unwrap_or(10);
+        let seconds: u64 =
+            std::env::args().nth(1).and_then(|value| value.parse().ok()).unwrap_or(10);
 
         let handle = Engine::spawn(Config::load_or_default());
         std::thread::sleep(std::time::Duration::from_secs(seconds));

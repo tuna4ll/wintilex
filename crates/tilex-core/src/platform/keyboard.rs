@@ -16,8 +16,8 @@ use windows::Win32::UI::Input::KeyboardAndMouse::{
     KEYEVENTF_KEYUP, VIRTUAL_KEY, VK_CONTROL, VK_LCONTROL, VK_LWIN, VK_MENU, VK_RWIN, VK_SHIFT,
 };
 use windows::Win32::UI::WindowsAndMessaging::{
-    CallNextHookEx, SetWindowsHookExW, UnhookWindowsHookEx, HHOOK, KBDLLHOOKSTRUCT,
-    LLKHF_INJECTED, WH_KEYBOARD_LL, WM_KEYDOWN, WM_SYSKEYDOWN,
+    CallNextHookEx, SetWindowsHookExW, UnhookWindowsHookEx, HHOOK, KBDLLHOOKSTRUCT, LLKHF_INJECTED,
+    WH_KEYBOARD_LL, WM_KEYDOWN, WM_SYSKEYDOWN,
 };
 
 use crate::command::Action;
@@ -144,8 +144,7 @@ unsafe extern "system" fn hook_proc(code: i32, wparam: WPARAM, lparam: LPARAM) -
 
     if is_key_down && !injected {
         let mask = current_mask();
-        let matched =
-            BINDINGS.with(|table| table.borrow().get(&(event.vkCode, mask)).copied());
+        let matched = BINDINGS.with(|table| table.borrow().get(&(event.vkCode, mask)).copied());
 
         if let Some(action) = matched {
             PENDING.with(|pending| pending.borrow_mut().push_back(action));
@@ -163,7 +162,9 @@ unsafe extern "system" fn hook_proc(code: i32, wparam: WPARAM, lparam: LPARAM) -
     // The shell opens the start menu when the Windows key goes up without any
     // other key in between. Since the other key was swallowed above, tap a
     // harmless modifier first to break that sequence.
-    if !is_key_down && !injected && (event.vkCode == VK_LWIN.0 as u32 || event.vkCode == VK_RWIN.0 as u32)
+    if !is_key_down
+        && !injected
+        && (event.vkCode == VK_LWIN.0 as u32 || event.vkCode == VK_RWIN.0 as u32)
     {
         let swallowed = SWALLOWED_WIN.with(|flag| flag.replace(false));
         if swallowed {
@@ -178,13 +179,7 @@ fn send_dummy_key() {
     let key = |flags: KEYBD_EVENT_FLAGS| INPUT {
         r#type: INPUT_KEYBOARD,
         Anonymous: INPUT_0 {
-            ki: KEYBDINPUT {
-                wVk: VK_LCONTROL,
-                wScan: 0,
-                dwFlags: flags,
-                time: 0,
-                dwExtraInfo: 0,
-            },
+            ki: KEYBDINPUT { wVk: VK_LCONTROL, wScan: 0, dwFlags: flags, time: 0, dwExtraInfo: 0 },
         },
     };
     let inputs = [key(KEYBD_EVENT_FLAGS(0)), key(KEYEVENTF_KEYUP)];

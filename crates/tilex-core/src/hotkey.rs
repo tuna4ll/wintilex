@@ -67,7 +67,8 @@ impl FromStr for Binding {
                 "win" | "super" | "meta" | "cmd" => modifiers.win = true,
                 _ => {
                     key = Some(
-                        virtual_key(part).ok_or_else(|| ParseError::UnknownKey(part.to_string()))?,
+                        virtual_key(part)
+                            .ok_or_else(|| ParseError::UnknownKey(part.to_string()))?,
                     )
                 }
             }
