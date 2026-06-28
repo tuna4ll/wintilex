@@ -1,5 +1,5 @@
 [workspace]
-members = ["crates/tilex-core"]
+members = ["crates/tilex-core", "src-tauri"]
 resolver = "2"
 
 [workspace.package]
