@@ -1,0 +1,70 @@
+//! Tauri shell.
+//!
+//! The window management runs entirely in `tilex-core` on its own thread. This
+//! crate only puts a tray icon and a settings window in front of it.
+
+mod commands;
+mod tray;
+
+use tauri::{Manager, WindowEvent};
+
+use tilex_core::config::Config;
+use tilex_core::manager::Engine;
+use tilex_core::platform::autostart;
+
+pub fn run() {
+    env_logger::Builder::from_env(env_logger::Env::default().default_filter_or("info")).init();
+
+    let config = Config::load_or_default();
+    // Only a launch from the Run key starts silently; opening Tilex by hand
+    // should always show the settings window.
+    let start_hidden = autostart::launched_at_startup();
+    let tiling_enabled = config.general.tiling_enabled;
+
+    // Make sure the registry entry matches what the config says, in case the
+    // executable was moved since it was written.
+    if let Err(error) = autostart::set(config.general.start_on_login) {
+        log::error!("could not update the startup entry: {error}");
+    }
+
+    let engine = Engine::spawn(config);
+
+    tauri::Builder::default()
+        .plugin(tauri_plugin_opener::init())
+        .manage(commands::AppState { engine: engine.clone() })
+        .invoke_handler(tauri::generate_handler![
+            commands::get_config,
+            commands::save_config,
+            commands::reset_config,
+            commands::get_snapshot,
+            commands::run_action,
+            commands::get_hotkey_issues,
+            commands::get_environment,
+            commands::reveal_config,
+            commands::preview_layout,
+        ])
+        .setup(move |app| {
+            tray::build(app.handle(), tiling_enabled)?;
+            if !start_hidden {
+                tray::show_settings(app.handle());
+            }
+            Ok(())
+        })
+        .on_window_event(|window, event| {
+            // Closing the settings window leaves the manager running; quitting
+            // is done from the tray so tiling never stops by accident.
+            if let WindowEvent::CloseRequested { api, .. } = event {
+                api.prevent_close();
+                let _ = window.hide();
+            }
+        })
+        .build(tauri::generate_context!())
+        .expect("failed to start Tilex")
+        .run(move |app, event| {
+            if let tauri::RunEvent::ExitRequested { .. } = event {
+                if let Some(state) = app.try_state::<commands::AppState>() {
+                    state.engine.shutdown();
+                }
+            }
+        });
+}
