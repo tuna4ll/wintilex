@@ -35,11 +35,9 @@ const WM_TILEX_COMMAND: u32 = WM_APP + 2;
 /// Events are collected for this long before the layout runs, so opening an
 /// application that shows three windows in a row only re-tiles once.
 const RELAYOUT_DELAY_MS: u32 = 45;
-const RELAYOUT_TIMER: usize = 1;
 
 /// Slow sweep that catches display changes and any event the hooks missed.
 const HOUSEKEEPING_MS: u32 = 2000;
-const HOUSEKEEPING_TIMER: usize = 2;
 
 enum Message {
     Run(Action),
@@ -158,10 +156,10 @@ fn run(config: Config, receiver: Receiver<Message>, shared: Arc<Inner>, ready: S
     manager.apply();
     publish(&manager, &shared);
 
-    let mut relayout_pending = false;
-    unsafe {
-        SetTimer(None, HOUSEKEEPING_TIMER, HOUSEKEEPING_MS, None);
-    }
+    // A thread timer ignores the id it is given and hands back one of its own,
+    // so the returned value is what `WM_TIMER` will actually carry.
+    let housekeeping_timer = unsafe { SetTimer(None, 0, HOUSEKEEPING_MS, None) };
+    let mut relayout_timer: Option<usize> = None;
 
     let mut message = MSG::default();
     loop {
@@ -212,22 +210,21 @@ fn run(config: Config, receiver: Receiver<Message>, shared: Arc<Inner>, ready: S
                     }
                 }
             }
-            WM_TIMER => match message.wParam.0 {
-                RELAYOUT_TIMER => {
+            WM_TIMER => {
+                let fired = message.wParam.0;
+                if Some(fired) == relayout_timer {
                     unsafe {
-                        let _ = KillTimer(None, RELAYOUT_TIMER);
+                        let _ = KillTimer(None, fired);
                     }
-                    relayout_pending = false;
+                    relayout_timer = None;
                     manager.apply();
                     publish(&manager, &shared);
-                }
-                HOUSEKEEPING_TIMER => {
+                } else if fired == housekeeping_timer {
                     manager.refresh_monitors();
                     manager.refresh();
                     dirty = true;
                 }
-                _ => {}
-            },
+            }
             WM_QUIT => stop = true,
             _ => unsafe {
                 let _ = TranslateMessage(&message);
@@ -241,19 +238,16 @@ fn run(config: Config, receiver: Receiver<Message>, shared: Arc<Inner>, ready: S
 
         if dirty {
             publish(&manager, &shared);
-            if !relayout_pending {
-                relayout_pending = true;
-                unsafe {
-                    SetTimer(None, RELAYOUT_TIMER, RELAYOUT_DELAY_MS, None);
-                }
+            if relayout_timer.is_none() {
+                relayout_timer = Some(unsafe { SetTimer(None, 0, RELAYOUT_DELAY_MS, None) });
             }
         }
     }
 
     unsafe {
-        let _ = KillTimer(None, HOUSEKEEPING_TIMER);
-        if relayout_pending {
-            let _ = KillTimer(None, RELAYOUT_TIMER);
+        let _ = KillTimer(None, housekeeping_timer);
+        if let Some(timer) = relayout_timer {
+            let _ = KillTimer(None, timer);
         }
     }
     drop(hooks);
