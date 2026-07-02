@@ -7,6 +7,7 @@
 //! stays that way.
 
 use crate::geometry::{Axis, Rect};
+use crate::layout::{Arrangement, RatioKey};
 use crate::manager::WindowManager;
 use crate::platform::events::DesktopEvent;
 use crate::platform::monitor::cursor_position;
@@ -145,7 +146,7 @@ impl WindowManager {
             || (end.height - start.height).abs() > EDGE_TOLERANCE;
 
         if resized {
-            if self.absorb_manual_resize() && self.absorb_resize(id, start, end) {
+            if self.absorb_manual_resize() && self.absorb_resize(id, end) {
                 return DragOutcome::Resized;
             }
             // Absorbing failed, so put the window back where the layout wants
@@ -166,43 +167,15 @@ impl WindowManager {
     ///
     /// Each edge that moved is matched to the split that produced it. An edge
     /// with no split behind it is an outer screen edge and is simply ignored.
-    fn absorb_resize(&mut self, id: WindowId, start: Rect, end: Rect) -> bool {
+    fn absorb_resize(&mut self, id: WindowId, end: Rect) -> bool {
         let Some((workspace_index, position)) = self.locate(id) else {
             return false;
         };
         let Some(arrangement) = self.arrangement_of(workspace_index) else {
             return false;
         };
-        let Some(raw) = arrangement.raw_tile(position) else {
-            return false;
-        };
 
-        // Undo the gap so the edges line up with the split positions.
-        let half = arrangement.gap / 2;
-        let grown = end.inset(-half);
-        let _ = start;
-
-        // For each edge: the axis it lives on, where it was, where it is now,
-        // and whether this window sits before the split that made it.
-        let edges = [
-            (Axis::Horizontal, raw.left(), grown.left(), false),
-            (Axis::Horizontal, raw.right(), grown.right(), true),
-            (Axis::Vertical, raw.top(), grown.top(), false),
-            (Axis::Vertical, raw.bottom(), grown.bottom(), true),
-        ];
-
-        let mut updates = Vec::new();
-        for (axis, was, now, on_first_side) in edges {
-            if (now - was).abs() <= EDGE_TOLERANCE {
-                continue;
-            }
-            if let Some(split) =
-                arrangement.find_split(position, axis, was, on_first_side, EDGE_TOLERANCE)
-            {
-                updates.push((split.key, split.ratio_at(now)));
-            }
-        }
-
+        let updates = ratio_updates(&arrangement, position, end);
         if updates.is_empty() {
             return false;
         }
@@ -237,6 +210,47 @@ impl WindowManager {
     }
 }
 
+/// Work out which split ratios a resize was really asking to change.
+///
+/// The window at `position` used to fill `arrangement`'s tile and now fills
+/// `resized`. Every edge that moved far enough is matched against the split
+/// that produced it; an edge with no split behind it is a screen edge and is
+/// left alone.
+fn ratio_updates(
+    arrangement: &Arrangement,
+    position: usize,
+    resized: Rect,
+) -> Vec<(RatioKey, f32)> {
+    let Some(tile) = arrangement.raw_tile(position) else {
+        return Vec::new();
+    };
+
+    // Undo the gap so the edges line up with the split positions.
+    let grown = resized.inset(-(arrangement.gap / 2));
+
+    // Per edge: the axis it lives on, where it was, where it is now, and
+    // whether this window sits before the split that made it.
+    let edges = [
+        (Axis::Horizontal, tile.left(), grown.left(), false),
+        (Axis::Horizontal, tile.right(), grown.right(), true),
+        (Axis::Vertical, tile.top(), grown.top(), false),
+        (Axis::Vertical, tile.bottom(), grown.bottom(), true),
+    ];
+
+    let mut updates = Vec::new();
+    for (axis, was, now, on_first_side) in edges {
+        if (now - was).abs() <= EDGE_TOLERANCE {
+            continue;
+        }
+        if let Some(split) =
+            arrangement.find_split(position, axis, was, on_first_side, EDGE_TOLERANCE)
+        {
+            updates.push((split.key, split.ratio_at(now)));
+        }
+    }
+    updates
+}
+
 /// Whether `actual` has drifted away from `tile` by more than `tolerance`.
 fn drifted(tile: Rect, actual: Rect, tolerance: i32) -> bool {
     (tile.x - actual.x).abs() > tolerance
@@ -249,11 +263,97 @@ fn drifted(tile: Rect, actual: Rect, tolerance: i32) -> bool {
 mod tests {
     use super::*;
 
+    use crate::layout::{arrange, Bsp, LayoutOptions, Ratios, ROOT_KEY};
+
+    fn plain() -> LayoutOptions {
+        LayoutOptions { gap: 0, outer_gap: 0, ..Default::default() }
+    }
+
+    /// Two windows side by side across a 1000x600 screen.
+    fn two_up() -> Arrangement {
+        arrange(&Bsp, Rect::new(0, 0, 1000, 600), 2, &plain(), &Ratios::new())
+    }
+
     #[test]
     fn drift_ignores_small_differences() {
         let tile = Rect::new(0, 0, 800, 600);
         assert!(!drifted(tile, Rect::new(2, 2, 800, 600), DRIFT_TOLERANCE));
         assert!(drifted(tile, Rect::new(200, 0, 800, 600), DRIFT_TOLERANCE));
         assert!(drifted(tile, Rect::new(0, 0, 400, 600), DRIFT_TOLERANCE));
+    }
+
+    #[test]
+    fn dragging_the_shared_edge_right_moves_the_split() {
+        let arrangement = two_up();
+        // The left window is pulled from 500 wide out to 700.
+        let updates = ratio_updates(&arrangement, 0, Rect::new(0, 0, 700, 600));
+        assert_eq!(updates.len(), 1);
+        assert_eq!(updates[0].0, ROOT_KEY);
+        assert!((updates[0].1 - 0.7).abs() < 0.01, "got {}", updates[0].1);
+    }
+
+    #[test]
+    fn the_same_split_is_found_from_either_side() {
+        let arrangement = two_up();
+        // Now the right window is dragged by its left edge, to the same place.
+        let updates = ratio_updates(&arrangement, 1, Rect::new(700, 0, 300, 600));
+        assert_eq!(updates.len(), 1);
+        assert_eq!(updates[0].0, ROOT_KEY);
+        assert!((updates[0].1 - 0.7).abs() < 0.01, "got {}", updates[0].1);
+    }
+
+    #[test]
+    fn outer_screen_edges_are_ignored() {
+        let arrangement = two_up();
+        // Dragging the left window's outer edge has no split behind it.
+        let updates = ratio_updates(&arrangement, 0, Rect::new(-200, 0, 700, 600));
+        assert_eq!(updates.len(), 0);
+    }
+
+    #[test]
+    fn a_nudge_smaller_than_the_tolerance_changes_nothing() {
+        let arrangement = two_up();
+        let updates = ratio_updates(&arrangement, 0, Rect::new(0, 0, 504, 600));
+        assert!(updates.is_empty());
+    }
+
+    #[test]
+    fn resizing_a_corner_moves_both_splits() {
+        // A 2x2 grid: the top-left window shares a vertical edge with the top
+        // right one and a horizontal edge with the bottom left one.
+        let arrangement = arrange(&Bsp, Rect::new(0, 0, 1000, 800), 4, &plain(), &Ratios::new());
+        let updates = ratio_updates(&arrangement, 0, Rect::new(0, 0, 700, 300));
+        assert_eq!(updates.len(), 2);
+        assert!(updates.iter().any(|(key, _)| *key == ROOT_KEY));
+    }
+
+    #[test]
+    fn absorbed_ratios_reproduce_the_dragged_size() {
+        let area = Rect::new(0, 0, 1000, 600);
+        let arrangement = arrange(&Bsp, area, 2, &plain(), &Ratios::new());
+        let dragged = Rect::new(0, 0, 640, 600);
+
+        let mut ratios = Ratios::new();
+        for (key, ratio) in ratio_updates(&arrangement, 0, dragged) {
+            ratios.set(key, ratio);
+        }
+
+        // Running the layout again has to land where the user let go.
+        let again = arrange(&Bsp, area, 2, &plain(), &ratios);
+        assert_eq!(again.tiles[0], dragged);
+    }
+
+    #[test]
+    fn gaps_do_not_shift_the_absorbed_ratio() {
+        let area = Rect::new(0, 0, 1000, 600);
+        let options = LayoutOptions { gap: 8, outer_gap: 0, ..Default::default() };
+        let arrangement = arrange(&Bsp, area, 2, &options, &Ratios::new());
+
+        // The user drags the visible edge of the left tile to 696, which is the
+        // gapped form of a 700 pixel split.
+        let dragged = Rect::new(4, 4, 692, 592);
+        let updates = ratio_updates(&arrangement, 0, dragged);
+        assert_eq!(updates.len(), 1);
+        assert!((updates[0].1 - 0.7).abs() < 0.01, "got {}", updates[0].1);
     }
 }
