@@ -681,6 +681,29 @@ impl WindowManager {
         self.dispatch(Action::SetLayout(kind))
     }
 
+    pub fn focus_follows_mouse(&self) -> bool {
+        self.config.general.focus_follows_mouse
+    }
+
+    /// Give the keyboard focus to whatever the pointer is over.
+    ///
+    /// Only tracked windows count, so hovering the taskbar or a menu leaves the
+    /// focus where it is instead of yanking it somewhere useless.
+    pub fn focus_under_cursor(&mut self) {
+        if self.drag.is_some() {
+            return;
+        }
+        let (x, y) = crate::platform::monitor::cursor_position();
+        let Some(native) = crate::platform::window::window_at(x, y) else {
+            return;
+        };
+        let id = native.id();
+        if self.focused == Some(id) || !self.is_tracked(id) || native.is_foreground() {
+            return;
+        }
+        self.focus_window(id);
+    }
+
     // -- accessors used by the event handling in `drag` ----------------------
 
     pub fn is_tracked(&self, id: WindowId) -> bool {

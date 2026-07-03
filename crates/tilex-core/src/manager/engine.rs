@@ -39,6 +39,10 @@ const RELAYOUT_DELAY_MS: u32 = 45;
 /// Slow sweep that catches display changes and any event the hooks missed.
 const HOUSEKEEPING_MS: u32 = 2000;
 
+/// Poll interval for focus-follows-mouse. Fast enough to feel immediate,
+/// slow enough that it costs nothing when the pointer is not moving.
+const FOCUS_FOLLOW_MS: u32 = 120;
+
 enum Message {
     Run(Action),
     ApplyConfig(Box<Config>),
@@ -160,6 +164,7 @@ fn run(config: Config, receiver: Receiver<Message>, shared: Arc<Inner>, ready: S
     // so the returned value is what `WM_TIMER` will actually carry.
     let housekeeping_timer = unsafe { SetTimer(None, 0, HOUSEKEEPING_MS, None) };
     let mut relayout_timer: Option<usize> = None;
+    let mut follow_timer = set_follow_timer(None, manager.focus_follows_mouse());
 
     let mut message = MSG::default();
     loop {
@@ -192,6 +197,8 @@ fn run(config: Config, receiver: Receiver<Message>, shared: Arc<Inner>, ready: S
                             manager.set_config(*config);
                             hotkeys.switch_backend(backend);
                             hotkeys.rebind(&manager, &shared);
+                            follow_timer =
+                                set_follow_timer(follow_timer, manager.focus_follows_mouse());
                             dirty = true;
                         }
                     }
@@ -219,6 +226,8 @@ fn run(config: Config, receiver: Receiver<Message>, shared: Arc<Inner>, ready: S
                     relayout_timer = None;
                     manager.apply();
                     publish(&manager, &shared);
+                } else if Some(fired) == follow_timer {
+                    manager.focus_under_cursor();
                 } else if fired == housekeeping_timer {
                     manager.refresh_monitors();
                     manager.refresh();
@@ -246,6 +255,9 @@ fn run(config: Config, receiver: Receiver<Message>, shared: Arc<Inner>, ready: S
 
     unsafe {
         let _ = KillTimer(None, housekeeping_timer);
+        if let Some(timer) = follow_timer {
+            let _ = KillTimer(None, timer);
+        }
         if let Some(timer) = relayout_timer {
             let _ = KillTimer(None, timer);
         }
@@ -331,4 +343,19 @@ impl Hotkeys {
 
 fn publish(manager: &WindowManager, shared: &Arc<Inner>) {
     *shared.snapshot.write() = manager.snapshot();
+}
+
+/// Start or stop the focus-follows-mouse poll, returning the live timer id.
+fn set_follow_timer(current: Option<usize>, wanted: bool) -> Option<usize> {
+    match (current, wanted) {
+        (Some(timer), true) => Some(timer),
+        (Some(timer), false) => {
+            unsafe {
+                let _ = KillTimer(None, timer);
+            }
+            None
+        }
+        (None, true) => Some(unsafe { SetTimer(None, 0, FOCUS_FOLLOW_MS, None) }),
+        (None, false) => None,
+    }
 }

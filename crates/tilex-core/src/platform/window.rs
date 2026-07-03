@@ -3,7 +3,7 @@
 use crate::geometry::Rect;
 use crate::platform::util::wide_to_string;
 
-use windows::Win32::Foundation::{CloseHandle, HWND, LPARAM, RECT, TRUE};
+use windows::Win32::Foundation::{CloseHandle, HWND, LPARAM, POINT, RECT, TRUE};
 use windows::Win32::Graphics::Dwm::{
     DwmGetWindowAttribute, DWMWA_CLOAKED, DWMWA_EXTENDED_FRAME_BOUNDS,
 };
@@ -14,11 +14,11 @@ use windows::Win32::System::Threading::{
 use windows::Win32::UI::WindowsAndMessaging::{
     EnumWindows, GetAncestor, GetClassNameW, GetForegroundWindow, GetWindowLongPtrW, GetWindowRect,
     GetWindowTextW, GetWindowThreadProcessId, IsIconic, IsWindow, IsWindowVisible, IsZoomed,
-    SetCursorPos, SetForegroundWindow, SetWindowPos, ShowWindow, GA_ROOTOWNER, GWL_EXSTYLE,
-    GWL_STYLE, HWND_BOTTOM, HWND_TOP, SET_WINDOW_POS_FLAGS, SWP_ASYNCWINDOWPOS, SWP_NOACTIVATE,
-    SWP_NOCOPYBITS, SWP_NOMOVE, SWP_NOSENDCHANGING, SWP_NOSIZE, SWP_NOZORDER, SW_MINIMIZE,
-    SW_RESTORE, SW_SHOWMAXIMIZED, SW_SHOWNOACTIVATE, WS_CAPTION, WS_CHILD, WS_DISABLED,
-    WS_EX_APPWINDOW, WS_EX_NOACTIVATE, WS_EX_TOOLWINDOW,
+    SetCursorPos, SetForegroundWindow, SetWindowPos, ShowWindow, WindowFromPoint, GA_ROOT,
+    GA_ROOTOWNER, GWL_EXSTYLE, GWL_STYLE, HWND_BOTTOM, HWND_TOP, SET_WINDOW_POS_FLAGS,
+    SWP_ASYNCWINDOWPOS, SWP_NOACTIVATE, SWP_NOCOPYBITS, SWP_NOMOVE, SWP_NOSENDCHANGING, SWP_NOSIZE,
+    SWP_NOZORDER, SW_MINIMIZE, SW_RESTORE, SW_SHOWMAXIMIZED, SW_SHOWNOACTIVATE, WS_CAPTION,
+    WS_CHILD, WS_DISABLED, WS_EX_APPWINDOW, WS_EX_NOACTIVATE, WS_EX_TOOLWINDOW,
 };
 
 /// Stable, thread-safe identifier for a native window.
@@ -448,5 +448,20 @@ unsafe extern "system" fn enum_proc(hwnd: HWND, lparam: LPARAM) -> windows::core
 pub fn warp_cursor(x: i32, y: i32) {
     unsafe {
         let _ = SetCursorPos(x, y);
+    }
+}
+
+/// The top-level window under a screen point, if there is one.
+pub fn window_at(x: i32, y: i32) -> Option<NativeWindow> {
+    let hwnd = unsafe { WindowFromPoint(POINT { x, y }) };
+    if hwnd.is_invalid() {
+        return None;
+    }
+    // The hit test returns the deepest child, so walk back up to the frame.
+    let root = unsafe { GetAncestor(hwnd, GA_ROOT) };
+    if root.is_invalid() {
+        None
+    } else {
+        Some(NativeWindow(root))
     }
 }
