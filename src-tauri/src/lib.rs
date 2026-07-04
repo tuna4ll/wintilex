@@ -10,10 +10,17 @@ use tauri::{Manager, WindowEvent};
 
 use tilex_core::config::Config;
 use tilex_core::manager::Engine;
-use tilex_core::platform::autostart;
+use tilex_core::platform::{autostart, instance};
 
 pub fn run() {
     env_logger::Builder::from_env(env_logger::Env::default().default_filter_or("info")).init();
+
+    // Two managers on one desktop would fight over every window, so a second
+    // launch just raises the settings window of the one already running.
+    let instance::Instance::First(guard, reopen) = instance::acquire() else {
+        log::info!("Tilex is already running; asked it to show its window");
+        return;
+    };
 
     let config = Config::load_or_default();
     // Only a launch from the Run key starts silently; opening Tilex by hand
@@ -48,6 +55,13 @@ pub fn run() {
             if !start_hidden {
                 tray::show_settings(app.handle());
             }
+
+            let handle = app.handle().clone();
+            std::thread::spawn(move || {
+                while reopen.recv().is_ok() {
+                    tray::show_settings(&handle);
+                }
+            });
             Ok(())
         })
         .on_window_event(|window, event| {
@@ -67,4 +81,6 @@ pub fn run() {
                 }
             }
         });
+
+    drop(guard);
 }
