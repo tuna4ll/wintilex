@@ -6,6 +6,8 @@
 mod commands;
 mod tray;
 
+use std::sync::atomic::Ordering;
+
 use tauri::{Manager, WindowEvent};
 
 use tilex_core::config::Config;
@@ -27,6 +29,7 @@ pub fn run() {
     // should always show the settings window.
     let start_hidden = autostart::launched_at_startup();
     let tiling_enabled = config.general.tiling_enabled;
+    let close_to_tray = config.general.minimize_to_tray;
 
     // Make sure the registry entry matches what the config says, in case the
     // executable was moved since it was written.
@@ -38,7 +41,10 @@ pub fn run() {
 
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
-        .manage(commands::AppState { engine: engine.clone() })
+        .manage(commands::AppState {
+            engine: engine.clone(),
+            close_to_tray: std::sync::atomic::AtomicBool::new(close_to_tray),
+        })
         .invoke_handler(tauri::generate_handler![
             commands::get_config,
             commands::save_config,
@@ -65,11 +71,16 @@ pub fn run() {
             Ok(())
         })
         .on_window_event(|window, event| {
-            // Closing the settings window leaves the manager running; quitting
-            // is done from the tray so tiling never stops by accident.
+            // With close-to-tray on, closing the settings window leaves the
+            // manager running so tiling never stops by accident.
             if let WindowEvent::CloseRequested { api, .. } = event {
-                api.prevent_close();
-                let _ = window.hide();
+                let hide = window
+                    .try_state::<commands::AppState>()
+                    .is_some_and(|state| state.close_to_tray.load(Ordering::Relaxed));
+                if hide {
+                    api.prevent_close();
+                    let _ = window.hide();
+                }
             }
         })
         .build(tauri::generate_context!())

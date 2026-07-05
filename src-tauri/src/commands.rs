@@ -14,6 +14,9 @@ use tilex_core::LayoutKind;
 
 pub struct AppState {
     pub engine: EngineHandle,
+    /// Mirrors `general.minimize-to-tray` so the close handler can read it
+    /// without going through the manager thread.
+    pub close_to_tray: std::sync::atomic::AtomicBool,
 }
 
 /// Commands return a plain string on failure so the UI can show it as-is.
@@ -50,6 +53,10 @@ pub fn get_config() -> CommandResult<Config> {
 #[tauri::command]
 pub fn save_config(state: State<'_, AppState>, config: Config) -> CommandResult<()> {
     config.save().map_err(|error| error.to_string())?;
+
+    state
+        .close_to_tray
+        .store(config.general.minimize_to_tray, std::sync::atomic::Ordering::Relaxed);
 
     // Keep the registry entry in step with the setting, but never let a failure
     // there block saving the rest of the configuration.
