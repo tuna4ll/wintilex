@@ -20,7 +20,7 @@ use crate::geometry::{Direction, Rect};
 use crate::layout::{arrange, Arrangement, LayoutKind, RatioKey, MAX_RATIO, MIN_RATIO};
 use crate::navigate;
 use crate::platform::monitor::{enumerate_monitors, monitor_at, Monitor, MonitorId};
-use crate::platform::window::{enumerate_manageable, NativeWindow, WindowId};
+use crate::platform::window::{enumerate_manageable, foreground_window, NativeWindow, WindowId};
 
 /// How far a split ratio moves per resize hotkey press.
 const RATIO_STEP: f32 = 0.02;
@@ -143,6 +143,22 @@ impl WindowManager {
         for id in gone {
             self.forget(id);
         }
+
+        self.seed_focus();
+    }
+
+    /// Adopt whatever the desktop already considers focused.
+    ///
+    /// Foreground events only tell us about *changes*, so without this the
+    /// first hotkey after startup would have nothing to act on.
+    fn seed_focus(&mut self) {
+        let known = matches!(self.focused, Some(id) if self.windows.contains_key(&id));
+        if known {
+            return;
+        }
+        self.focused = foreground_window()
+            .map(|native| native.id())
+            .filter(|id| self.windows.contains_key(id));
     }
 
     fn facts_action(&self, native: &NativeWindow) -> (RuleAction, Option<usize>) {
@@ -304,7 +320,11 @@ impl WindowManager {
             }
             native.set_frame_rect(tile);
             if let Some(window) = self.windows.get_mut(id) {
-                window.tile = Some(tile);
+                // Record where the window actually ended up, not where it was
+                // asked to go. Applications with a minimum size refuse to get
+                // any smaller, and comparing against the wish would make the
+                // drift check fire on every event forever.
+                window.tile = Some(native.frame_rect());
             }
         }
 
