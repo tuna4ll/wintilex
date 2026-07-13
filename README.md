@@ -15,12 +15,14 @@ thread; Tauri only provides the settings window and the tray icon.
 - Dragging a tile edge changes the split behind it instead of being undone on
   the next pass, so manual resizing sticks.
 
+![The settings window](docs/settings.png)
+
 ## Building
 
 ```
 npm install
 npm run tauri dev      # development
-npm run tauri build    # installer in src-tauri/target/release/bundle
+npm run tauri build    # installers land in target/release/bundle
 ```
 
 Requires Rust (stable, MSVC toolchain), Node 18 or newer, and the WebView2
