@@ -79,7 +79,7 @@ export function generalView(
       "Hotkeys",
       row(
         "Capture method",
-        "The keyboard hook can bind combinations Windows reserves, such as Win+H.",
+        "The keyboard hook sees keys before the shell does, which is what makes Win+arrow bindings possible.",
         select<HotkeyBackend>(
           [
             { value: "hook", label: "Keyboard hook" },
@@ -94,7 +94,7 @@ export function generalView(
       ),
       row(
         "Leave Windows shortcuts alone",
-        "Keeps Win+Tab, Win+Ctrl+Arrow, Win+Space and Alt+Tab working. Turn this off only if you want Tilex to take them over.",
+        "Keeps Win+L, Win+Tab, Win+Ctrl+Arrow, Win+Space and Alt+Tab with Windows. Turn this off only if you want Tilex to take them over.",
         checkbox(general["protect-system-shortcuts"], (value) => {
           general["protect-system-shortcuts"] = value;
           onChange();

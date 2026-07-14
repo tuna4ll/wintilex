@@ -46,7 +46,7 @@ export function hotkeysView(
       el(
         "td",
         { class: "mono" },
-        text(hotkey.binding, "Win+Shift+H", (value) => {
+        text(hotkey.binding, "Win+Shift+Left", (value) => {
           hotkey.binding = value.trim();
           onChange();
           rerender();
