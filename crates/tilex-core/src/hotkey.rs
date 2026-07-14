@@ -115,6 +115,53 @@ impl<'de> Deserialize<'de> for Binding {
     }
 }
 
+/// Shortcuts that belong to Windows and are worth more than a tiling binding.
+///
+/// The keyboard hook sees keys before the shell does, so binding one of these
+/// would silently take it away: no more task view, no more virtual desktops, no
+/// more switching keyboard layout. Tilex leaves them alone unless the user
+/// turns that protection off.
+///
+/// Only genuinely load-bearing shortcuts belong here. `Win+H`, `Win+K` and
+/// `Win+L` are deliberately absent: they are part of the default vim-style
+/// navigation and giving them up would gut the point of the program.
+const RESERVED: &[(Modifiers, u32, &str)] = &[
+    (WIN, VK_TAB, "task view"),
+    (WIN, VK_SPACE, "switching keyboard layout"),
+    (WIN_SHIFT, VK_SPACE, "switching keyboard layout"),
+    (WIN, b'D' as u32, "show desktop"),
+    (WIN, b'G' as u32, "game bar"),
+    (WIN, VK_PRINT_SCREEN, "screenshots"),
+    (WIN_SHIFT, b'S' as u32, "the snipping tool"),
+    (WIN_CTRL, VK_LEFT, "virtual desktops"),
+    (WIN_CTRL, VK_RIGHT, "virtual desktops"),
+    (WIN_CTRL, b'D' as u32, "virtual desktops"),
+    (WIN_CTRL, VK_F4, "virtual desktops"),
+    (ALT, VK_TAB, "the window switcher"),
+    (ALT_SHIFT, VK_TAB, "the window switcher"),
+];
+
+const WIN: Modifiers = Modifiers { alt: false, control: false, shift: false, win: true };
+const WIN_SHIFT: Modifiers = Modifiers { alt: false, control: false, shift: true, win: true };
+const WIN_CTRL: Modifiers = Modifiers { alt: false, control: true, shift: false, win: true };
+const ALT: Modifiers = Modifiers { alt: true, control: false, shift: false, win: false };
+const ALT_SHIFT: Modifiers = Modifiers { alt: true, control: false, shift: true, win: false };
+
+const VK_TAB: u32 = 0x09;
+const VK_SPACE: u32 = 0x20;
+const VK_LEFT: u32 = 0x25;
+const VK_RIGHT: u32 = 0x27;
+const VK_PRINT_SCREEN: u32 = 0x2C;
+const VK_F4: u32 = 0x73;
+
+/// What Windows would lose if Tilex took this binding, if anything.
+pub fn system_reserved(binding: &Binding) -> Option<&'static str> {
+    RESERVED
+        .iter()
+        .find(|(modifiers, key, _)| *modifiers == binding.modifiers && *key == binding.key)
+        .map(|(_, _, feature)| *feature)
+}
+
 /// Map a key name to its virtual key code.
 pub fn virtual_key(name: &str) -> Option<u32> {
     let lower = name.to_ascii_lowercase();
@@ -231,6 +278,37 @@ mod tests {
     fn display_uses_a_stable_modifier_order() {
         let binding: Binding = "shift+alt+ctrl+win+k".parse().unwrap();
         assert_eq!(binding.to_string(), "Win+Ctrl+Alt+Shift+K");
+    }
+
+    fn reserved(text: &str) -> Option<&'static str> {
+        system_reserved(&text.parse::<Binding>().unwrap())
+    }
+
+    #[test]
+    fn the_shortcuts_windows_needs_are_protected() {
+        assert!(reserved("Win+Tab").is_some());
+        assert!(reserved("Win+Ctrl+Left").is_some());
+        assert!(reserved("Win+Ctrl+Right").is_some());
+        assert!(reserved("Win+Space").is_some());
+        assert!(reserved("Alt+Tab").is_some());
+    }
+
+    #[test]
+    fn the_default_navigation_keys_stay_available() {
+        for text in ["Win+H", "Win+J", "Win+K", "Win+L"] {
+            assert_eq!(reserved(text), None, "{text} must stay bindable");
+        }
+        for text in ["Win+Shift+H", "Win+Ctrl+L", "Win+Alt+Left", "Win+Alt+Space"] {
+            assert_eq!(reserved(text), None, "{text} must stay bindable");
+        }
+    }
+
+    #[test]
+    fn protection_is_exact_about_modifiers() {
+        // Win+Ctrl+Left is a virtual desktop, Win+Alt+Left is nothing.
+        assert!(reserved("Win+Ctrl+Left").is_some());
+        assert_eq!(reserved("Win+Ctrl+Shift+Left"), None);
+        assert_eq!(reserved("Win+Alt+Left"), None);
     }
 
     #[test]

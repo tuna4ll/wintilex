@@ -48,6 +48,9 @@ pub struct General {
     pub absorb_manual_resize: bool,
     /// How global hotkeys are captured.
     pub hotkey_backend: HotkeyBackend,
+    /// Never take over the handful of shortcuts Windows itself needs, such as
+    /// `Win+Tab` and `Win+Ctrl+Arrow`. See [`crate::hotkey::system_reserved`].
+    pub protect_system_shortcuts: bool,
 }
 
 /// Which mechanism Tilex uses to grab its hotkeys.
@@ -74,6 +77,7 @@ impl Default for General {
             warp_cursor_to_focus: false,
             absorb_manual_resize: true,
             hotkey_backend: HotkeyBackend::default(),
+            protect_system_shortcuts: true,
         }
     }
 }
@@ -134,18 +138,22 @@ pub fn default_hotkeys() -> Vec<Hotkey> {
         hotkeys.push(Hotkey::new(&format!("Win+Ctrl+{key}"), Action::Grow(direction)));
     }
 
+    // Everything that is not part of the directional scheme lives under
+    // `Win+Alt`, which Windows leaves almost entirely alone. Earlier versions
+    // used `Win+Tab`, `Win+Space` and `Win+Ctrl+Arrow` and swallowed the task
+    // view, the layout switcher and the virtual desktops along with them.
     hotkeys.extend([
-        Hotkey::new("Win+Ctrl+Left", Action::MoveToMonitor(Left)),
-        Hotkey::new("Win+Ctrl+Right", Action::MoveToMonitor(Right)),
-        Hotkey::new("Win+Tab", Action::FocusCycle(Cycle::Next)),
-        Hotkey::new("Win+Shift+Tab", Action::FocusCycle(Cycle::Previous)),
-        Hotkey::new("Win+Enter", Action::Promote),
-        Hotkey::new("Win+Space", Action::CycleLayout),
-        Hotkey::new("Win+Shift+Space", Action::ToggleFloating),
-        Hotkey::new("Win+Shift+M", Action::ToggleReversed),
-        Hotkey::new("Win+Shift+R", Action::ResetRatios),
-        Hotkey::new("Win+Ctrl+T", Action::ToggleTiling),
-        Hotkey::new("Win+Shift+Q", Action::Minimize),
+        Hotkey::new("Win+Alt+Left", Action::MoveToMonitor(Left)),
+        Hotkey::new("Win+Alt+Right", Action::MoveToMonitor(Right)),
+        Hotkey::new("Win+Alt+J", Action::FocusCycle(Cycle::Next)),
+        Hotkey::new("Win+Alt+K", Action::FocusCycle(Cycle::Previous)),
+        Hotkey::new("Win+Alt+Enter", Action::Promote),
+        Hotkey::new("Win+Alt+Space", Action::CycleLayout),
+        Hotkey::new("Win+Alt+F", Action::ToggleFloating),
+        Hotkey::new("Win+Alt+X", Action::ToggleReversed),
+        Hotkey::new("Win+Alt+Z", Action::ResetRatios),
+        Hotkey::new("Win+Alt+P", Action::ToggleTiling),
+        Hotkey::new("Win+Alt+Q", Action::Minimize),
     ]);
 
     hotkeys
@@ -172,10 +180,55 @@ impl Config {
 
     pub fn load_from(path: &Path) -> Result<Config, ConfigError> {
         match std::fs::read_to_string(path) {
-            Ok(text) => Ok(serde_json::from_str(&text)?),
+            Ok(text) => {
+                let mut config: Config = serde_json::from_str(&text)?;
+                config.rehome_reserved_bindings();
+                Ok(config)
+            }
             Err(error) if error.kind() == io::ErrorKind::NotFound => Ok(Config::default()),
             Err(error) => Err(error.into()),
         }
+    }
+
+    /// Move bindings off the shortcuts Windows needs.
+    ///
+    /// Tilex used to bind `Win+Tab`, `Win+Space` and `Win+Ctrl+Arrow`, which
+    /// took the task view, the keyboard layout switcher and the virtual
+    /// desktops away from the shell. Those bindings are now refused, so a
+    /// config written by an older build would quietly lose the actions along
+    /// with them. Each one is moved to whatever the current defaults use for
+    /// the same action instead.
+    fn rehome_reserved_bindings(&mut self) -> usize {
+        if !self.general.protect_system_shortcuts {
+            return 0;
+        }
+
+        let defaults = default_hotkeys();
+        let mut moved = 0;
+
+        for index in 0..self.hotkeys.len() {
+            let hotkey = &self.hotkeys[index];
+            if crate::hotkey::system_reserved(&hotkey.binding).is_none() {
+                continue;
+            }
+            let Some(replacement) = defaults
+                .iter()
+                .find(|other| other.action == hotkey.action)
+                .map(|other| other.binding)
+            else {
+                continue;
+            };
+            // Never collide with a binding the user set up themselves.
+            if self.hotkeys.iter().any(|other| other.binding == replacement) {
+                continue;
+            }
+
+            log::info!("moved {} to {replacement}", self.hotkeys[index].binding);
+            self.hotkeys[index].binding = replacement;
+            moved += 1;
+        }
+
+        moved
     }
 
     /// Like [`load`](Self::load) but never fails: a broken file is logged and
@@ -265,6 +318,18 @@ mod tests {
     }
 
     #[test]
+    fn no_default_binding_steals_a_windows_shortcut() {
+        for hotkey in Config::default().hotkeys {
+            assert_eq!(
+                crate::hotkey::system_reserved(&hotkey.binding),
+                None,
+                "{} is reserved by Windows",
+                hotkey.binding
+            );
+        }
+    }
+
+    #[test]
     fn later_bindings_win_a_clash() {
         let mut config = Config::default();
         config.hotkeys.push(Hotkey::new("Win+H", Action::Retile));
@@ -298,6 +363,62 @@ mod tests {
         assert_eq!(loaded.layout_options.gap, 24);
 
         let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn an_old_config_gives_the_windows_shortcuts_back() {
+        // What Tilex 0.1 wrote out.
+        let mut config = Config {
+            hotkeys: vec![
+                Hotkey::new("Win+Tab", Action::FocusCycle(Cycle::Next)),
+                Hotkey::new("Win+Space", Action::CycleLayout),
+                Hotkey::new("Win+Ctrl+Left", Action::MoveToMonitor(Direction::Left)),
+                Hotkey::new("Win+H", Action::Focus(Direction::Left)),
+            ],
+            ..Default::default()
+        };
+
+        assert_eq!(config.rehome_reserved_bindings(), 3);
+
+        for hotkey in &config.hotkeys {
+            assert_eq!(crate::hotkey::system_reserved(&hotkey.binding), None);
+        }
+        // The untouched binding stays exactly where it was.
+        let focus = config.hotkeys.iter().find(|h| h.action == Action::Focus(Direction::Left));
+        assert_eq!(focus.unwrap().binding.to_string(), "Win+H");
+    }
+
+    #[test]
+    fn rehoming_runs_only_once() {
+        let mut config = Config {
+            hotkeys: vec![Hotkey::new("Win+Tab", Action::FocusCycle(Cycle::Next))],
+            ..Default::default()
+        };
+        assert_eq!(config.rehome_reserved_bindings(), 1);
+        assert_eq!(config.rehome_reserved_bindings(), 0);
+    }
+
+    #[test]
+    fn rehoming_never_overwrites_a_binding_in_use() {
+        let mut config = Config {
+            hotkeys: vec![
+                Hotkey::new("Win+Tab", Action::FocusCycle(Cycle::Next)),
+                // The slot the migration would want is already taken.
+                Hotkey::new("Win+Alt+J", Action::Retile),
+            ],
+            ..Default::default()
+        };
+        assert_eq!(config.rehome_reserved_bindings(), 0);
+    }
+
+    #[test]
+    fn rehoming_is_skipped_when_protection_is_off() {
+        let mut config = Config {
+            general: General { protect_system_shortcuts: false, ..Default::default() },
+            hotkeys: vec![Hotkey::new("Win+Tab", Action::FocusCycle(Cycle::Next))],
+            ..Default::default()
+        };
+        assert_eq!(config.rehome_reserved_bindings(), 0);
     }
 
     #[test]

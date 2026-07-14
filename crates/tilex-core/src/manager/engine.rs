@@ -23,6 +23,7 @@ use windows::Win32::UI::WindowsAndMessaging::{
 
 use crate::command::Action;
 use crate::config::{Config, HotkeyBackend};
+use crate::hotkey::system_reserved;
 use crate::manager::state::Snapshot;
 use crate::manager::WindowManager;
 use crate::platform::events::{EventHooks, WM_TILEX_EVENT};
@@ -292,14 +293,31 @@ impl Hotkeys {
     }
 
     fn rebind(&mut self, manager: &WindowManager, shared: &Arc<Inner>) {
-        let bindings: Vec<_> = manager
+        let protect = manager.config().general.protect_system_shortcuts;
+
+        // A binding that would take away one of the shell's own shortcuts is
+        // dropped before it ever reaches the hook, so an old config file that
+        // still claims `Win+Tab` gives it straight back.
+        let (bindings, mut failed): (Vec<_>, Vec<_>) = manager
             .config()
             .active_hotkeys()
             .into_iter()
-            .map(|hotkey| (hotkey.binding, hotkey.action))
-            .collect();
+            .map(|hotkey| {
+                let reserved = protect.then(|| system_reserved(&hotkey.binding)).flatten();
+                (hotkey.binding, hotkey.action, reserved)
+            })
+            .fold((Vec::new(), Vec::new()), |(mut keep, mut drop), (binding, action, reserved)| {
+                match reserved {
+                    Some(feature) => drop.push(FailedBinding {
+                        binding,
+                        reason: format!("left to Windows for {feature}"),
+                    }),
+                    None => keep.push((binding, action)),
+                }
+                (keep, drop)
+            });
 
-        let failed = match self {
+        failed.extend(match self {
             Hotkeys::Hook(Some(hook)) => {
                 hook.set_bindings(&bindings);
                 log::info!("{} hotkeys active via the keyboard hook", hook.len());
@@ -318,7 +336,7 @@ impl Hotkeys {
                 log::info!("{} hotkeys active via RegisterHotKey", registry.len());
                 failed
             }
-        };
+        });
 
         if !failed.is_empty() {
             log::warn!("{} hotkeys could not be registered", failed.len());
