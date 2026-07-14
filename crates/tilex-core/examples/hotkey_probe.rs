@@ -11,7 +11,7 @@ fn main() {
             _ => HotkeyBackend::Hook,
         };
 
-        let mut config = Config::default();
+        let mut config = Config::load_or_default();
         config.general.hotkey_backend = backend;
         config.general.tiling_enabled = false;
 
@@ -19,7 +19,7 @@ fn main() {
         std::thread::sleep(std::time::Duration::from_millis(1200));
 
         let failed = handle.failed_hotkeys();
-        println!("backend {backend:?}: {} bindings rejected", failed.len());
+        println!("backend {backend:?}: {} of the configured bindings are inactive", failed.len());
         for failure in failed {
             println!("  {} -> {}", failure.binding, failure.reason);
         }
