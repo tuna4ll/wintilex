@@ -21,6 +21,14 @@ pub use rules::{RuleAction, WindowFacts, WindowRule};
 pub const APP_DIR: &str = "Tilex";
 pub const CONFIG_FILE: &str = "config.json";
 
+/// Current shape of the configuration. See [`Config::version`].
+pub const CONFIG_VERSION: u32 = 2;
+
+/// What a file that predates the version field reads as.
+fn no_version() -> u32 {
+    0
+}
+
 #[derive(Debug, thiserror::Error)]
 pub enum ConfigError {
     #[error("could not locate the application data directory")]
@@ -85,6 +93,10 @@ impl Default for General {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(default, rename_all = "kebab-case")]
 pub struct Config {
+    /// Bumped whenever the shipped defaults move, so a file written by an older
+    /// build can be recognised. Files from before this existed read as 0.
+    #[serde(default = "no_version")]
+    pub version: u32,
     pub general: General,
     pub layout: LayoutKind,
     #[serde(flatten)]
@@ -117,6 +129,7 @@ impl Hotkey {
 impl Default for Config {
     fn default() -> Self {
         Self {
+            version: CONFIG_VERSION,
             general: General::default(),
             layout: LayoutKind::default(),
             layout_options: LayoutOptions::default(),
@@ -126,25 +139,30 @@ impl Default for Config {
     }
 }
 
-/// The vim-style bindings from the readme.
+/// The bindings from the readme.
+///
+/// The directional actions sit on the arrow keys because that is the corner of
+/// the keyboard Windows already spends on window arranging: `Win+Arrow` snaps,
+/// `Win+Shift+Arrow` throws a window at the next display. Tilex does all of
+/// that better, so taking those over costs nothing. Letters were the obvious
+/// first choice, but `Win+L` locks the screen and no focus key is worth that.
+///
+/// `Win+Ctrl+Arrow` is left alone: those are the virtual desktops, which have
+/// nothing to do with tiling. Resizing lives on `Win+Alt+Arrow` instead.
 pub fn default_hotkeys() -> Vec<Hotkey> {
     use Direction::{Down, Left, Right, Up};
 
-    let mut hotkeys = Vec::with_capacity(20);
+    let mut hotkeys = Vec::with_capacity(24);
 
-    for (key, direction) in [("H", Left), ("J", Down), ("K", Up), ("L", Right)] {
+    for (key, direction) in [("Left", Left), ("Down", Down), ("Up", Up), ("Right", Right)] {
         hotkeys.push(Hotkey::new(&format!("Win+{key}"), Action::Focus(direction)));
         hotkeys.push(Hotkey::new(&format!("Win+Shift+{key}"), Action::Move(direction)));
-        hotkeys.push(Hotkey::new(&format!("Win+Ctrl+{key}"), Action::Grow(direction)));
+        hotkeys.push(Hotkey::new(&format!("Win+Alt+{key}"), Action::Grow(direction)));
     }
 
-    // Everything that is not part of the directional scheme lives under
-    // `Win+Alt`, which Windows leaves almost entirely alone. Earlier versions
-    // used `Win+Tab`, `Win+Space` and `Win+Ctrl+Arrow` and swallowed the task
-    // view, the layout switcher and the virtual desktops along with them.
     hotkeys.extend([
-        Hotkey::new("Win+Alt+Left", Action::MoveToMonitor(Left)),
-        Hotkey::new("Win+Alt+Right", Action::MoveToMonitor(Right)),
+        Hotkey::new("Win+Alt+Shift+Left", Action::MoveToMonitor(Left)),
+        Hotkey::new("Win+Alt+Shift+Right", Action::MoveToMonitor(Right)),
         Hotkey::new("Win+Alt+J", Action::FocusCycle(Cycle::Next)),
         Hotkey::new("Win+Alt+K", Action::FocusCycle(Cycle::Previous)),
         Hotkey::new("Win+Alt+Enter", Action::Promote),
@@ -154,6 +172,43 @@ pub fn default_hotkeys() -> Vec<Hotkey> {
         Hotkey::new("Win+Alt+Z", Action::ResetRatios),
         Hotkey::new("Win+Alt+P", Action::ToggleTiling),
         Hotkey::new("Win+Alt+Q", Action::Minimize),
+    ]);
+
+    hotkeys
+}
+
+/// Bindings that shipped as defaults in an earlier build.
+///
+/// Used to recognise a hotkey the user never touched, so it can be carried onto
+/// the current scheme while anything they picked themselves is left alone.
+fn superseded_defaults() -> Vec<Hotkey> {
+    use Direction::{Down, Left, Right, Up};
+
+    let mut hotkeys = Vec::with_capacity(24);
+
+    // 0.1 put the directional actions on hjkl.
+    for (key, direction) in [("H", Left), ("J", Down), ("K", Up), ("L", Right)] {
+        hotkeys.push(Hotkey::new(&format!("Win+{key}"), Action::Focus(direction)));
+        hotkeys.push(Hotkey::new(&format!("Win+Shift+{key}"), Action::Move(direction)));
+        hotkeys.push(Hotkey::new(&format!("Win+Ctrl+{key}"), Action::Grow(direction)));
+    }
+
+    hotkeys.extend([
+        // 0.1, before the shell shortcuts were given back.
+        Hotkey::new("Win+Ctrl+Left", Action::MoveToMonitor(Left)),
+        Hotkey::new("Win+Ctrl+Right", Action::MoveToMonitor(Right)),
+        Hotkey::new("Win+Tab", Action::FocusCycle(Cycle::Next)),
+        Hotkey::new("Win+Shift+Tab", Action::FocusCycle(Cycle::Previous)),
+        Hotkey::new("Win+Enter", Action::Promote),
+        Hotkey::new("Win+Space", Action::CycleLayout),
+        Hotkey::new("Win+Shift+Space", Action::ToggleFloating),
+        Hotkey::new("Win+Shift+M", Action::ToggleReversed),
+        Hotkey::new("Win+Shift+R", Action::ResetRatios),
+        Hotkey::new("Win+Ctrl+T", Action::ToggleTiling),
+        Hotkey::new("Win+Shift+Q", Action::Minimize),
+        // The short-lived Win+Alt scheme that kept hjkl.
+        Hotkey::new("Win+Alt+Left", Action::MoveToMonitor(Left)),
+        Hotkey::new("Win+Alt+Right", Action::MoveToMonitor(Right)),
     ]);
 
     hotkeys
@@ -182,7 +237,13 @@ impl Config {
         match std::fs::read_to_string(path) {
             Ok(text) => {
                 let mut config: Config = serde_json::from_str(&text)?;
-                config.rehome_reserved_bindings();
+                if config.migrate() > 0 {
+                    // Write the result straight back, so the migration happens
+                    // once rather than on every start.
+                    if let Err(error) = config.save_to(path) {
+                        log::warn!("could not save the migrated config: {error}");
+                    }
+                }
                 Ok(config)
             }
             Err(error) if error.kind() == io::ErrorKind::NotFound => Ok(Config::default()),
@@ -190,44 +251,60 @@ impl Config {
         }
     }
 
-    /// Move bindings off the shortcuts Windows needs.
+    /// Carry a file written by an older build onto the current defaults.
     ///
-    /// Tilex used to bind `Win+Tab`, `Win+Space` and `Win+Ctrl+Arrow`, which
-    /// took the task view, the keyboard layout switcher and the virtual
-    /// desktops away from the shell. Those bindings are now refused, so a
-    /// config written by an older build would quietly lose the actions along
-    /// with them. Each one is moved to whatever the current defaults use for
-    /// the same action instead.
-    fn rehome_reserved_bindings(&mut self) -> usize {
-        if !self.general.protect_system_shortcuts {
+    /// Only bindings the user never changed are touched: a hotkey counts as
+    /// untouched when its binding is exactly what some earlier build shipped
+    /// for that same action. Anything else is theirs and stays put, even if it
+    /// now clashes with a shell shortcut, in which case the settings window
+    /// shows it as inactive rather than rewriting it behind their back.
+    fn migrate(&mut self) -> usize {
+        if self.version >= CONFIG_VERSION {
             return 0;
         }
 
-        let defaults = default_hotkeys();
-        let mut moved = 0;
+        let current = default_hotkeys();
+        let superseded = superseded_defaults();
 
-        for index in 0..self.hotkeys.len() {
-            let hotkey = &self.hotkeys[index];
-            if crate::hotkey::system_reserved(&hotkey.binding).is_none() {
-                continue;
-            }
-            let Some(replacement) = defaults
+        let was_default = |hotkey: &Hotkey| {
+            superseded
                 .iter()
-                .find(|other| other.action == hotkey.action)
-                .map(|other| other.binding)
-            else {
+                .any(|old| old.action == hotkey.action && old.binding == hotkey.binding)
+        };
+        let wanted = |hotkey: &Hotkey| {
+            current.iter().find(|new| new.action == hotkey.action).map(|new| new.binding)
+        };
+
+        // Work out the whole plan first. Bindings that are staying put are the
+        // only ones a moving binding has to avoid, since the current defaults
+        // never clash with each other.
+        let planned: Vec<Option<Binding>> = self
+            .hotkeys
+            .iter()
+            .map(|hotkey| {
+                wanted(hotkey).filter(|target| was_default(hotkey) && *target != hotkey.binding)
+            })
+            .collect();
+
+        let staying: Vec<Binding> = self
+            .hotkeys
+            .iter()
+            .zip(&planned)
+            .filter(|(_, target)| target.is_none())
+            .map(|(hotkey, _)| hotkey.binding)
+            .collect();
+
+        let mut moved = 0;
+        for (hotkey, target) in self.hotkeys.iter_mut().zip(planned) {
+            let Some(target) = target.filter(|target| !staying.contains(target)) else {
                 continue;
             };
-            // Never collide with a binding the user set up themselves.
-            if self.hotkeys.iter().any(|other| other.binding == replacement) {
-                continue;
-            }
-
-            log::info!("moved {} to {replacement}", self.hotkeys[index].binding);
-            self.hotkeys[index].binding = replacement;
+            log::info!("moved {} to {target}", hotkey.binding);
+            hotkey.binding = target;
             moved += 1;
         }
 
+        self.version = CONFIG_VERSION;
         moved
     }
 
@@ -299,7 +376,16 @@ mod tests {
     #[test]
     fn missing_fields_fall_back_to_defaults() {
         let parsed: Config = serde_json::from_str("{}").unwrap();
-        assert_eq!(parsed, Config::default());
+        // A file with no version predates it, which is what triggers migration.
+        assert_eq!(parsed.version, 0);
+        assert_eq!(Config { version: CONFIG_VERSION, ..parsed }, Config::default());
+    }
+
+    #[test]
+    fn a_saved_file_carries_the_current_version() {
+        let text = serde_json::to_string(&Config::default()).unwrap();
+        let parsed: Config = serde_json::from_str(&text).unwrap();
+        assert_eq!(parsed.version, CONFIG_VERSION);
     }
 
     #[test]
@@ -365,60 +451,127 @@ mod tests {
         let _ = std::fs::remove_dir_all(&dir);
     }
 
-    #[test]
-    fn an_old_config_gives_the_windows_shortcuts_back() {
-        // What Tilex 0.1 wrote out.
-        let mut config = Config {
+    /// A config as Tilex 0.1 wrote it, before the arrow-key scheme.
+    fn version_zero() -> Config {
+        Config {
+            version: 0,
             hotkeys: vec![
+                Hotkey::new("Win+H", Action::Focus(Direction::Left)),
+                Hotkey::new("Win+L", Action::Focus(Direction::Right)),
+                Hotkey::new("Win+Shift+H", Action::Move(Direction::Left)),
+                Hotkey::new("Win+Ctrl+H", Action::Grow(Direction::Left)),
                 Hotkey::new("Win+Tab", Action::FocusCycle(Cycle::Next)),
                 Hotkey::new("Win+Space", Action::CycleLayout),
                 Hotkey::new("Win+Ctrl+Left", Action::MoveToMonitor(Direction::Left)),
-                Hotkey::new("Win+H", Action::Focus(Direction::Left)),
             ],
             ..Default::default()
-        };
-
-        assert_eq!(config.rehome_reserved_bindings(), 3);
-
-        for hotkey in &config.hotkeys {
-            assert_eq!(crate::hotkey::system_reserved(&hotkey.binding), None);
         }
-        // The untouched binding stays exactly where it was.
-        let focus = config.hotkeys.iter().find(|h| h.action == Action::Focus(Direction::Left));
-        assert_eq!(focus.unwrap().binding.to_string(), "Win+H");
     }
 
     #[test]
-    fn rehoming_runs_only_once() {
-        let mut config = Config {
-            hotkeys: vec![Hotkey::new("Win+Tab", Action::FocusCycle(Cycle::Next))],
-            ..Default::default()
+    fn an_old_config_moves_onto_the_arrow_keys() {
+        let mut config = version_zero();
+        assert_eq!(config.migrate(), 7);
+
+        let binding_for = |action: Action| {
+            config
+                .hotkeys
+                .iter()
+                .find(|hotkey| hotkey.action == action)
+                .map(|hotkey| hotkey.binding.to_string())
+                .unwrap()
         };
-        assert_eq!(config.rehome_reserved_bindings(), 1);
-        assert_eq!(config.rehome_reserved_bindings(), 0);
+
+        assert_eq!(binding_for(Action::Focus(Direction::Left)), "Win+Left");
+        assert_eq!(binding_for(Action::Focus(Direction::Right)), "Win+Right");
+        assert_eq!(binding_for(Action::Move(Direction::Left)), "Win+Shift+Left");
+        assert_eq!(binding_for(Action::Grow(Direction::Left)), "Win+Alt+Left");
+        assert_eq!(binding_for(Action::MoveToMonitor(Direction::Left)), "Win+Alt+Shift+Left");
     }
 
     #[test]
-    fn rehoming_never_overwrites_a_binding_in_use() {
+    fn migrating_gives_every_windows_shortcut_back() {
+        let mut config = version_zero();
+        config.migrate();
+        for hotkey in &config.hotkeys {
+            assert_eq!(
+                crate::hotkey::system_reserved(&hotkey.binding),
+                None,
+                "{} still belongs to Windows",
+                hotkey.binding
+            );
+        }
+    }
+
+    #[test]
+    fn migrating_runs_only_once() {
+        let mut config = version_zero();
+        assert!(config.migrate() > 0);
+        assert_eq!(config.version, CONFIG_VERSION);
+        assert_eq!(config.migrate(), 0);
+    }
+
+    #[test]
+    fn migrating_leaves_a_binding_the_user_chose_alone() {
         let mut config = Config {
+            version: 0,
             hotkeys: vec![
+                // Never a default, so it is the user's own choice.
+                Hotkey::new("Win+Ctrl+Alt+P", Action::Focus(Direction::Left)),
                 Hotkey::new("Win+Tab", Action::FocusCycle(Cycle::Next)),
-                // The slot the migration would want is already taken.
-                Hotkey::new("Win+Alt+J", Action::Retile),
             ],
             ..Default::default()
         };
-        assert_eq!(config.rehome_reserved_bindings(), 0);
+        assert_eq!(config.migrate(), 1);
+        assert_eq!(config.hotkeys[0].binding.to_string(), "Win+Ctrl+Alt+P");
     }
 
     #[test]
-    fn rehoming_is_skipped_when_protection_is_off() {
+    fn migrating_never_overwrites_a_binding_in_use() {
         let mut config = Config {
-            general: General { protect_system_shortcuts: false, ..Default::default() },
-            hotkeys: vec![Hotkey::new("Win+Tab", Action::FocusCycle(Cycle::Next))],
+            version: 0,
+            hotkeys: vec![
+                Hotkey::new("Win+H", Action::Focus(Direction::Left)),
+                // The slot the migration wants is already spoken for.
+                Hotkey::new("Win+Left", Action::Retile),
+            ],
             ..Default::default()
         };
-        assert_eq!(config.rehome_reserved_bindings(), 0);
+        assert_eq!(config.migrate(), 0);
+        assert_eq!(config.hotkeys[0].binding.to_string(), "Win+H");
+    }
+
+    #[test]
+    fn a_current_file_is_left_exactly_as_it_is() {
+        let mut config = Config::default();
+        // Somebody deliberately put focus-left back on Win+H.
+        config.hotkeys.push(Hotkey::new("Win+H", Action::Focus(Direction::Left)));
+        let before = config.clone();
+        assert_eq!(config.migrate(), 0);
+        assert_eq!(config, before);
+    }
+
+    #[test]
+    fn loading_an_old_file_writes_the_migration_back() {
+        let dir = std::env::temp_dir().join("tilex-migrate-test");
+        let _ = std::fs::remove_dir_all(&dir);
+        let path = dir.join("config.json");
+        version_zero().save_to(&path).unwrap();
+
+        // Saving stamps the current version, so put it back the way an old
+        // build would have left it.
+        let text = std::fs::read_to_string(&path).unwrap();
+        std::fs::write(&path, text.replace(r#""version": 2"#, r#""version": 0"#)).unwrap();
+
+        let loaded = Config::load_from(&path).unwrap();
+        assert_eq!(loaded.version, CONFIG_VERSION);
+
+        // The second read finds a file that needs nothing done to it.
+        let again = Config::load_from(&path).unwrap();
+        assert_eq!(again, loaded);
+        assert_eq!(again.hotkeys[0].binding.to_string(), "Win+Left");
+
+        let _ = std::fs::remove_dir_all(&dir);
     }
 
     #[test]

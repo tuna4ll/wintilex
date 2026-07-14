@@ -122,10 +122,11 @@ impl<'de> Deserialize<'de> for Binding {
 /// more switching keyboard layout. Tilex leaves them alone unless the user
 /// turns that protection off.
 ///
-/// Only genuinely load-bearing shortcuts belong here. `Win+H`, `Win+K` and
-/// `Win+L` are deliberately absent: they are part of the default vim-style
-/// navigation and giving them up would gut the point of the program.
+/// The directional bindings use the arrow keys rather than `hjkl` precisely so
+/// that this list can include `Win+L`: losing the lock screen is not a trade
+/// worth making for one focus key.
 const RESERVED: &[(Modifiers, u32, &str)] = &[
+    (WIN, b'L' as u32, "locking the screen"),
     (WIN, VK_TAB, "task view"),
     (WIN, VK_SPACE, "switching keyboard layout"),
     (WIN_SHIFT, VK_SPACE, "switching keyboard layout"),
@@ -286,6 +287,7 @@ mod tests {
 
     #[test]
     fn the_shortcuts_windows_needs_are_protected() {
+        assert!(reserved("Win+L").is_some());
         assert!(reserved("Win+Tab").is_some());
         assert!(reserved("Win+Ctrl+Left").is_some());
         assert!(reserved("Win+Ctrl+Right").is_some());
@@ -294,21 +296,27 @@ mod tests {
     }
 
     #[test]
-    fn the_default_navigation_keys_stay_available() {
-        for text in ["Win+H", "Win+J", "Win+K", "Win+L"] {
+    fn the_directional_keys_stay_available() {
+        // Aero Snap is what Tilex replaces, so the plain arrows are fair game.
+        for text in ["Win+Left", "Win+Down", "Win+Up", "Win+Right"] {
             assert_eq!(reserved(text), None, "{text} must stay bindable");
         }
-        for text in ["Win+Shift+H", "Win+Ctrl+L", "Win+Alt+Left", "Win+Alt+Space"] {
+        for text in ["Win+Shift+Left", "Win+Alt+Left", "Win+Alt+Shift+Left", "Win+Alt+Space"] {
             assert_eq!(reserved(text), None, "{text} must stay bindable");
         }
     }
 
     #[test]
     fn protection_is_exact_about_modifiers() {
-        // Win+Ctrl+Left is a virtual desktop, Win+Alt+Left is nothing.
+        // Win+Ctrl+Left switches virtual desktop; the other two are nothing.
         assert!(reserved("Win+Ctrl+Left").is_some());
         assert_eq!(reserved("Win+Ctrl+Shift+Left"), None);
         assert_eq!(reserved("Win+Alt+Left"), None);
+
+        // Only the bare Win+L locks; a modifier on top does not.
+        assert!(reserved("Win+L").is_some());
+        assert_eq!(reserved("Win+Shift+L"), None);
+        assert_eq!(reserved("Win+Ctrl+L"), None);
     }
 
     #[test]
