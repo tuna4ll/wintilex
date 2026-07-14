@@ -19,7 +19,7 @@ export function windowsView(
     "div",
     {},
     el("h1", { class: "page-title" }, "Windows"),
-    el("p", { class: "page-subtitle" }, "What Tilex is managing right now."),
+    el("p", { class: "page-subtitle" }, "What WinTilex is managing right now."),
 
     card(
       "Displays",

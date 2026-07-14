@@ -1,7 +1,7 @@
 import type { Config, Hotkey, HotkeyIssue } from "../api";
 import { card, el, text } from "../dom";
 
-/** Human labels for the action tags serialised by `tilex_core::command`. */
+/** Human labels for the action tags serialised by `wintilex_core::command`. */
 const ACTION_LABELS: Record<string, string> = {
   focus: "Focus",
   move: "Move window",
@@ -115,7 +115,7 @@ export function hotkeysView(
           "div",
           { class: "warning" },
           `${issues.length} binding${issues.length === 1 ? "" : "s"} ${issues.length === 1 ? "is" : "are"} not active. ` +
-            "Bindings left to Windows are the shell shortcuts Tilex refuses to swallow; " +
+            "Bindings left to Windows are the shell shortcuts WinTilex refuses to swallow; " +
             "give them a different combination, or turn the protection off on the General page.",
         ),
       el(

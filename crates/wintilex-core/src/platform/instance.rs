@@ -1,4 +1,4 @@
-//! Making sure only one Tilex is running.
+//! Making sure only one WinTilex is running.
 //!
 //! Two window managers fighting over the same desktop is worse than none, so a
 //! second launch hands its request over to the first one and exits. A named
@@ -18,10 +18,10 @@ use windows::Win32::System::Threading::{
 
 use crate::platform::util::to_wide;
 
-const MUTEX_NAME: &str = "Local\\TilexSingleInstance";
-const EVENT_NAME: &str = "Local\\TilexShowSettings";
+const MUTEX_NAME: &str = "Local\\WinTilexSingleInstance";
+const EVENT_NAME: &str = "Local\\WinTilexShowSettings";
 
-/// Held for as long as this process is the one running Tilex.
+/// Held for as long as this process is the one running WinTilex.
 pub struct InstanceGuard {
     mutex: HANDLE,
     event: HANDLE,
@@ -71,7 +71,7 @@ pub fn acquire() -> Instance {
     let (sender, receiver) = channel();
     let watched = event.0 as isize;
     thread::Builder::new()
-        .name("tilex-instance".into())
+        .name("wintilex-instance".into())
         .spawn(move || {
             let handle = HANDLE(watched as *mut std::ffi::c_void);
             loop {

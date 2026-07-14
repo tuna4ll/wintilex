@@ -1,5 +1,7 @@
-// Draws the Tilex mark and writes it as a PNG. Run with `node tools/make-icon.mjs`.
-// Kept dependency free so regenerating the icon never needs an install.
+// Draws the WinTilex mark and writes it as a PNG, for `tauri icon` to slice up.
+// The same shape lives in assets/logo.svg, which is the one to edit by hand;
+// keep the rectangles below in step with it. Kept dependency free so
+// regenerating the icon never needs an install.
 import { deflateSync } from "node:zlib";
 import { writeFileSync, mkdirSync } from "node:fs";
 
@@ -25,7 +27,7 @@ function roundedRect(x0, y0, x1, y1, radius, [r, g, b]) {
   }
 }
 
-// One tall tile on the left, two stacked on the right: the layout Tilex
+// One tall tile on the left, two stacked on the right: the layout WinTilex
 // produces for three windows.
 roundedRect(128, 128, 472, 896, RADIUS, ACCENT);
 roundedRect(552, 128, 896, 488, RADIUS, ACCENT_DIM);

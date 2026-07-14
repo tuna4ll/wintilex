@@ -13,7 +13,7 @@ export function generalView(
     "div",
     {},
     el("h1", { class: "page-title" }, "General"),
-    el("p", { class: "page-subtitle" }, "How Tilex behaves while it is running."),
+    el("p", { class: "page-subtitle" }, "How WinTilex behaves while it is running."),
 
     card(
       "Tiling",
@@ -67,7 +67,7 @@ export function generalView(
       ),
       row(
         "Close to tray",
-        "Closing this window leaves Tilex running in the tray.",
+        "Closing this window leaves WinTilex running in the tray.",
         checkbox(general["minimize-to-tray"], (value) => {
           general["minimize-to-tray"] = value;
           onChange();
@@ -94,7 +94,7 @@ export function generalView(
       ),
       row(
         "Leave Windows shortcuts alone",
-        "Keeps Win+L, Win+Tab, Win+Ctrl+Arrow, Win+Space and Alt+Tab with Windows. Turn this off only if you want Tilex to take them over.",
+        "Keeps Win+L, Win+Tab, Win+Ctrl+Arrow, Win+Space and Alt+Tab with Windows. Turn this off only if you want WinTilex to take them over.",
         checkbox(general["protect-system-shortcuts"], (value) => {
           general["protect-system-shortcuts"] = value;
           onChange();

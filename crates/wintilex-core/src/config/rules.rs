@@ -5,7 +5,7 @@
 
 use serde::{Deserialize, Serialize};
 
-/// What Tilex does with a window that matches a rule.
+/// What WinTilex does with a window that matches a rule.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
 #[serde(rename_all = "kebab-case")]
 pub enum RuleAction {

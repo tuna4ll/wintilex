@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" width="1024" height="1024" role="img" aria-labelledby="title desc">
+  <title id="title">WinTilex</title>
+  <desc id="desc">Three tiles: one tall pane on the left, two stacked on the right, the layout WinTilex produces for three windows.</desc>
+
+  <rect x="128" y="128" width="344" height="768" rx="44" fill="#2F6FEB"/>
+  <rect x="552" y="128" width="344" height="360" rx="44" fill="#78A0F5"/>
+  <rect x="552" y="536" width="344" height="360" rx="44" fill="#78A0F5"/>
+</svg>

@@ -27,7 +27,7 @@ export interface WindowRule {
   disabled: boolean;
 }
 
-/** Serialised form of `tilex_core::command::Action`. */
+/** Serialised form of `wintilex_core::command::Action`. */
 export interface Action {
   kind: string;
   value?: unknown;

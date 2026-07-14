@@ -26,12 +26,12 @@ use crate::config::{Config, HotkeyBackend};
 use crate::hotkey::system_reserved;
 use crate::manager::state::Snapshot;
 use crate::manager::WindowManager;
-use crate::platform::events::{EventHooks, WM_TILEX_EVENT};
+use crate::platform::events::{EventHooks, WM_WINTILEX_EVENT};
 use crate::platform::hotkey::{FailedBinding, HotkeyRegistry};
 use crate::platform::keyboard::KeyboardHook;
 
 /// Sent when a message has been pushed onto the command channel.
-const WM_TILEX_COMMAND: u32 = WM_APP + 2;
+const WM_WINTILEX_COMMAND: u32 = WM_APP + 2;
 
 /// Events are collected for this long before the layout runs, so opening an
 /// application that shows three windows in a row only re-tiles once.
@@ -68,13 +68,13 @@ impl EngineHandle {
     /// Queue an action and wake the manager thread.
     pub fn dispatch(&self, action: Action) {
         let _ = self.inner.sender.send(Message::Run(action));
-        self.wake(WM_TILEX_COMMAND);
+        self.wake(WM_WINTILEX_COMMAND);
     }
 
     /// Hand the manager a new configuration.
     pub fn apply_config(&self, config: Config) {
         let _ = self.inner.sender.send(Message::ApplyConfig(Box::new(config)));
-        self.wake(WM_TILEX_COMMAND);
+        self.wake(WM_WINTILEX_COMMAND);
     }
 
     /// The most recent view of the desktop.
@@ -89,7 +89,7 @@ impl EngineHandle {
 
     pub fn shutdown(&self) {
         let _ = self.inner.sender.send(Message::Shutdown);
-        self.wake(WM_TILEX_COMMAND);
+        self.wake(WM_WINTILEX_COMMAND);
     }
 
     fn wake(&self, message: u32) {
@@ -126,7 +126,7 @@ impl Engine {
 
         let thread_state = Arc::clone(&shared);
         thread::Builder::new()
-            .name("tilex-manager".into())
+            .name("wintilex-manager".into())
             .spawn(move || run(config, receiver, thread_state, ready_sender))
             .expect("failed to start the manager thread");
 
@@ -188,7 +188,7 @@ fn run(config: Config, receiver: Receiver<Message>, shared: Arc<Inner>, ready: S
                     }
                 }
             }
-            WM_TILEX_COMMAND => {
+            WM_WINTILEX_COMMAND => {
                 while let Ok(incoming) = receiver.try_recv() {
                     match incoming {
                         Message::Run(Action::Quit) | Message::Shutdown => stop = true,
@@ -205,7 +205,7 @@ fn run(config: Config, receiver: Receiver<Message>, shared: Arc<Inner>, ready: S
                     }
                 }
             }
-            WM_TILEX_EVENT => {
+            WM_WINTILEX_EVENT => {
                 for event in hooks.drain() {
                     dirty |= manager.handle_event(event);
                 }

@@ -22,7 +22,7 @@ use windows::Win32::UI::WindowsAndMessaging::{
 use crate::platform::window::WindowId;
 
 /// Posted to the hook thread whenever the queue gains an entry.
-pub const WM_TILEX_EVENT: u32 = windows::Win32::UI::WindowsAndMessaging::WM_APP + 1;
+pub const WM_WINTILEX_EVENT: u32 = windows::Win32::UI::WindowsAndMessaging::WM_APP + 1;
 
 /// Something happened on the desktop that the manager may care about.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -121,7 +121,7 @@ pub fn wake_hook_thread() {
     let thread = OWNER_THREAD.with(|owner| *owner.borrow());
     if thread != 0 {
         unsafe {
-            let _ = PostThreadMessageW(thread, WM_TILEX_EVENT, WPARAM(0), LPARAM(0));
+            let _ = PostThreadMessageW(thread, WM_WINTILEX_EVENT, WPARAM(0), LPARAM(0));
         }
     }
 }

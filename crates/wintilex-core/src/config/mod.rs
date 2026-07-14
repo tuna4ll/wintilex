@@ -1,7 +1,7 @@
 //! On-disk configuration.
 //!
-//! The file lives at `%APPDATA%\Tilex\config.json`. A missing or partly written
-//! file is not an error: every field has a default, so Tilex starts with a
+//! The file lives at `%APPDATA%\WinTilex\config.json`. A missing or partly written
+//! file is not an error: every field has a default, so WinTilex starts with a
 //! working setup and fills the gaps back in on the next save.
 
 pub mod rules;
@@ -18,7 +18,7 @@ use crate::layout::{LayoutKind, LayoutOptions};
 
 pub use rules::{RuleAction, WindowFacts, WindowRule};
 
-pub const APP_DIR: &str = "Tilex";
+pub const APP_DIR: &str = "WinTilex";
 pub const CONFIG_FILE: &str = "config.json";
 
 /// Current shape of the configuration. See [`Config::version`].
@@ -42,7 +42,7 @@ pub enum ConfigError {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(default, rename_all = "kebab-case")]
 pub struct General {
-    /// Master switch. When off Tilex still tracks windows but moves nothing.
+    /// Master switch. When off WinTilex still tracks windows but moves nothing.
     pub tiling_enabled: bool,
     /// Start with Windows.
     pub start_on_login: bool,
@@ -61,7 +61,7 @@ pub struct General {
     pub protect_system_shortcuts: bool,
 }
 
-/// Which mechanism Tilex uses to grab its hotkeys.
+/// Which mechanism WinTilex uses to grab its hotkeys.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
 #[serde(rename_all = "kebab-case")]
 pub enum HotkeyBackend {
@@ -143,7 +143,7 @@ impl Default for Config {
 ///
 /// The directional actions sit on the arrow keys because that is the corner of
 /// the keyboard Windows already spends on window arranging: `Win+Arrow` snaps,
-/// `Win+Shift+Arrow` throws a window at the next display. Tilex does all of
+/// `Win+Shift+Arrow` throws a window at the next display. WinTilex does all of
 /// that better, so taking those over costs nothing. Letters were the obvious
 /// first choice, but `Win+L` locks the screen and no focus key is worth that.
 ///
@@ -215,7 +215,7 @@ fn superseded_defaults() -> Vec<Hotkey> {
 }
 
 impl Config {
-    /// `%APPDATA%\Tilex`.
+    /// `%APPDATA%\WinTilex`.
     pub fn directory() -> Result<PathBuf, ConfigError> {
         let appdata = std::env::var_os("APPDATA").ok_or(ConfigError::NoConfigDir)?;
         Ok(PathBuf::from(appdata).join(APP_DIR))
@@ -437,7 +437,7 @@ mod tests {
 
     #[test]
     fn save_and_load_a_file() {
-        let dir = std::env::temp_dir().join("tilex-config-test");
+        let dir = std::env::temp_dir().join("wintilex-config-test");
         let _ = std::fs::remove_dir_all(&dir);
         let path = dir.join("config.json");
 
@@ -451,7 +451,7 @@ mod tests {
         let _ = std::fs::remove_dir_all(&dir);
     }
 
-    /// A config as Tilex 0.1 wrote it, before the arrow-key scheme.
+    /// A config as WinTilex 0.1 wrote it, before the arrow-key scheme.
     fn version_zero() -> Config {
         Config {
             version: 0,
@@ -553,7 +553,7 @@ mod tests {
 
     #[test]
     fn loading_an_old_file_writes_the_migration_back() {
-        let dir = std::env::temp_dir().join("tilex-migrate-test");
+        let dir = std::env::temp_dir().join("wintilex-migrate-test");
         let _ = std::fs::remove_dir_all(&dir);
         let path = dir.join("config.json");
         version_zero().save_to(&path).unwrap();
@@ -576,7 +576,7 @@ mod tests {
 
     #[test]
     fn a_missing_file_yields_the_defaults() {
-        let path = std::env::temp_dir().join("tilex-does-not-exist-9f3a.json");
+        let path = std::env::temp_dir().join("wintilex-does-not-exist-9f3a.json");
         assert_eq!(Config::load_from(&path).unwrap(), Config::default());
     }
 }

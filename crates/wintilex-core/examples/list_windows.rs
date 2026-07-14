@@ -1,9 +1,9 @@
-//! Dumps every window Tilex considers manageable. Handy for tuning the filter.
+//! Dumps every window WinTilex considers manageable. Handy for tuning the filter.
 
 fn main() {
     #[cfg(windows)]
     {
-        use tilex_core::platform::{enumerate_manageable, enumerate_monitors};
+        use wintilex_core::platform::{enumerate_manageable, enumerate_monitors};
 
         for monitor in enumerate_monitors() {
             println!(

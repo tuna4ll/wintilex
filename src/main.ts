@@ -105,7 +105,7 @@ function sidebar(): HTMLElement {
       "div",
       { class: "brand" },
       el("span", { class: "brand-mark" }, el("i", {}), el("i", {}), el("i", {})),
-      "Tilex",
+      "WinTilex",
     ),
     ...PAGES.map((entry) =>
       el(

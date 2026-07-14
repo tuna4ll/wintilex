@@ -1,8 +1,10 @@
-# Tilex
+<img src="assets/logo.svg" alt="" width="72" align="left" hspace="12">
+
+# WinTilex
 
 Auto-tiling window manager for Windows.
 
-Tilex watches the desktop through the Win32 event hooks, keeps track of every
+WinTilex watches the desktop through the Win32 event hooks, keeps track of every
 manageable top-level window and re-tiles them whenever something opens, closes
 or moves. The window management runs entirely in Rust on its own message-loop
 thread; Tauri only provides the settings window and the tray icon.
@@ -14,8 +16,6 @@ thread; Tauri only provides the settings window and the tray icon.
   a hotkey.
 - Dragging a tile edge changes the split behind it instead of being undone on
   the next pass, so manual resizing sticks.
-
-![The settings window](docs/settings.png)
 
 ## Building
 
@@ -31,8 +31,8 @@ runtime, which ships with Windows 11.
 The window management can also be run on its own, without any UI:
 
 ```
-cargo run -p tilex-core --example headless -- 30
-cargo run -p tilex-core --example list_windows
+cargo run -p wintilex-core --example headless -- 30
+cargo run -p wintilex-core --example list_windows
 ```
 
 ## Default hotkeys
@@ -54,7 +54,7 @@ cargo run -p tilex-core --example list_windows
 
 The directional actions sit on the arrows because that is the part of the
 keyboard Windows already spends on window arranging: `Win`+arrow snaps a window
-to half the screen and `Win`+`Shift`+arrow throws it at the next display. Tilex
+to half the screen and `Win`+`Shift`+arrow throws it at the next display. WinTilex
 does both of those properly, so taking them over loses nothing. Letters were
 the obvious first choice, but `Win`+`L` locks the screen and no focus key is worth
 that. `Win`+`Ctrl`+arrow is left alone as well, since virtual desktops have
@@ -63,15 +63,15 @@ nothing to do with tiling.
 To shrink a window, grow it in the opposite direction.
 
 Windows reserves most of these combinations for the shell, and `RegisterHotKey`
-refuses them outright. Tilex therefore captures its bindings with a low-level
+refuses them outright. WinTilex therefore captures its bindings with a low-level
 keyboard hook by default, which sees the key before the shell does. The General
 page can switch to `RegisterHotKey` instead; the Hotkeys page then marks
 whatever Windows would not hand over.
 
-### Shortcuts Tilex leaves alone
+### Shortcuts WinTilex leaves alone
 
 Seeing keys before the shell cuts both ways: a binding on the wrong combination
-would take a Windows feature away with no warning. Tilex therefore refuses to
+would take a Windows feature away with no warning. WinTilex therefore refuses to
 swallow the shortcuts the shell actually needs, whatever the config says:
 
 `Win`+`L`, `Win`+`Tab`, `Win`+`Ctrl`+`←`/`→`/`D`/`F4`, `Win`+`Space`,
@@ -96,13 +96,13 @@ moved; anything chosen by hand is left exactly where it is.
 | Monocle          | Every window fills the screen; only the focused one shows.  |
 
 The layout is picked per display, from the tray menu or with `Win`+`Alt`+`Space`.
-Adding a new one means implementing `LayoutAlgorithm` in `crates/tilex-core/src/layout`
+Adding a new one means implementing `LayoutAlgorithm` in `crates/wintilex-core/src/layout`
 and adding a variant to `LayoutKind`; reporting the split edges is what lets a
 manual resize be folded back in.
 
 ## Configuration
 
-`%APPDATA%\Tilex\config.json`, written by the settings window and re-read when
+`%APPDATA%\WinTilex\config.json`, written by the settings window and re-read when
 it is saved. A missing or partly filled file is fine: every field falls back to
 its default.
 
@@ -120,16 +120,16 @@ winning:
 ```
 
 `tile` puts the window in the layout, `float` leaves its position alone, and
-`ignore` makes Tilex pretend it does not exist. A rule can also pin an
+`ignore` makes WinTilex pretend it does not exist. A rule can also pin an
 application to a display with `"monitor": 1`.
 
 ## Notes
 
 - Starting with Windows is a per-user entry under the `Run` registry key, so
   turning it on never asks for elevation.
-- Elevated windows cannot be moved by a normal process. Run Tilex as
+- Elevated windows cannot be moved by a normal process. Run WinTilex as
   administrator if you need it to manage them.
-- Only one instance can run at a time; launching Tilex again just brings the
+- Only one instance can run at a time; launching WinTilex again just brings the
   settings window back.
 
 ## License

@@ -1,5 +1,5 @@
 [package]
-name = "tilex"
+name = "wintilex"
 description = "Auto-tiling window manager for Windows"
 version.workspace = true
 edition.workspace = true
@@ -8,14 +8,14 @@ authors.workspace = true
 license.workspace = true
 
 [lib]
-name = "tilex_lib"
+name = "wintilex_lib"
 crate-type = ["staticlib", "cdylib", "rlib"]
 
 [build-dependencies]
 tauri-build = { version = "2", features = [] }
 
 [dependencies]
-tilex-core = { path = "../crates/tilex-core" }
+wintilex-core = { path = "../crates/wintilex-core" }
 tauri = { version = "2", features = ["tray-icon", "image-png"] }
 tauri-plugin-opener = "2"
 serde.workspace = true

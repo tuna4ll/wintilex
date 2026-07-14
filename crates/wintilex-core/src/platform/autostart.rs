@@ -16,14 +16,14 @@ use windows::Win32::System::Registry::{
 use crate::platform::util::{to_wide, wide_to_string};
 
 const RUN_KEY: &str = r"Software\Microsoft\Windows\CurrentVersion\Run";
-const VALUE_NAME: &str = "Tilex";
+const VALUE_NAME: &str = "WinTilex";
 
 /// Argument the entry passes, so a startup launch can skip showing the window.
 pub const AUTOSTART_FLAG: &str = "--autostart";
 
 #[derive(Debug, thiserror::Error)]
 pub enum AutostartError {
-    #[error("could not work out where Tilex is installed: {0}")]
+    #[error("could not work out where WinTilex is installed: {0}")]
     ExePath(#[from] std::io::Error),
     #[error("registry error 0x{0:08X}")]
     Registry(u32),

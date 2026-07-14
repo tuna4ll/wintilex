@@ -119,7 +119,7 @@ impl<'de> Deserialize<'de> for Binding {
 ///
 /// The keyboard hook sees keys before the shell does, so binding one of these
 /// would silently take it away: no more task view, no more virtual desktops, no
-/// more switching keyboard layout. Tilex leaves them alone unless the user
+/// more switching keyboard layout. WinTilex leaves them alone unless the user
 /// turns that protection off.
 ///
 /// The directional bindings use the arrow keys rather than `hjkl` precisely so
@@ -155,7 +155,7 @@ const VK_RIGHT: u32 = 0x27;
 const VK_PRINT_SCREEN: u32 = 0x2C;
 const VK_F4: u32 = 0x73;
 
-/// What Windows would lose if Tilex took this binding, if anything.
+/// What Windows would lose if WinTilex took this binding, if anything.
 pub fn system_reserved(binding: &Binding) -> Option<&'static str> {
     RESERVED
         .iter()
@@ -297,7 +297,7 @@ mod tests {
 
     #[test]
     fn the_directional_keys_stay_available() {
-        // Aero Snap is what Tilex replaces, so the plain arrows are fair game.
+        // Aero Snap is what WinTilex replaces, so the plain arrows are fair game.
         for text in ["Win+Left", "Win+Down", "Win+Up", "Win+Right"] {
             assert_eq!(reserved(text), None, "{text} must stay bindable");
         }

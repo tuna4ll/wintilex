@@ -1,6 +1,6 @@
 [package]
-name = "tilex-core"
-description = "Window management core for Tilex"
+name = "wintilex-core"
+description = "Window management core for WinTilex"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true

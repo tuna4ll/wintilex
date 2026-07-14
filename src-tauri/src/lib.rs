@@ -1,6 +1,6 @@
 //! Tauri shell.
 //!
-//! The window management runs entirely in `tilex-core` on its own thread. This
+//! The window management runs entirely in `wintilex-core` on its own thread. This
 //! crate only puts a tray icon and a settings window in front of it.
 
 mod commands;
@@ -10,9 +10,9 @@ use std::sync::atomic::Ordering;
 
 use tauri::{Manager, WindowEvent};
 
-use tilex_core::config::Config;
-use tilex_core::manager::Engine;
-use tilex_core::platform::{autostart, instance};
+use wintilex_core::config::Config;
+use wintilex_core::manager::Engine;
+use wintilex_core::platform::{autostart, instance};
 
 pub fn run() {
     env_logger::Builder::from_env(env_logger::Env::default().default_filter_or("info")).init();
@@ -20,12 +20,12 @@ pub fn run() {
     // Two managers on one desktop would fight over every window, so a second
     // launch just raises the settings window of the one already running.
     let instance::Instance::First(guard, reopen) = instance::acquire() else {
-        log::info!("Tilex is already running; asked it to show its window");
+        log::info!("WinTilex is already running; asked it to show its window");
         return;
     };
 
     let config = Config::load_or_default();
-    // Only a launch from the Run key starts silently; opening Tilex by hand
+    // Only a launch from the Run key starts silently; opening WinTilex by hand
     // should always show the settings window.
     let start_hidden = autostart::launched_at_startup();
     let tiling_enabled = config.general.tiling_enabled;
@@ -84,7 +84,7 @@ pub fn run() {
             }
         })
         .build(tauri::generate_context!())
-        .expect("failed to start Tilex")
+        .expect("failed to start WinTilex")
         .run(move |app, event| {
             if let tauri::RunEvent::ExitRequested { .. } = event {
                 if let Some(state) = app.try_state::<commands::AppState>() {

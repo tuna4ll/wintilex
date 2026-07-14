@@ -1,10 +1,10 @@
-//! Reports which of the configured bindings Windows lets Tilex have.
+//! Reports which of the configured bindings Windows lets WinTilex have.
 
 fn main() {
     #[cfg(windows)]
     {
-        use tilex_core::config::{Config, HotkeyBackend};
-        use tilex_core::manager::Engine;
+        use wintilex_core::config::{Config, HotkeyBackend};
+        use wintilex_core::manager::Engine;
 
         let backend = match std::env::args().nth(1).as_deref() {
             Some("system") => HotkeyBackend::System,

@@ -368,7 +368,7 @@ impl NativeWindow {
         NativeWindow(unsafe { GetAncestor(self.0, GA_ROOTOWNER) })
     }
 
-    /// Whether Tilex should track this window at all.
+    /// Whether WinTilex should track this window at all.
     ///
     /// Minimized windows still pass: they are managed, just not tiled right now.
     pub fn is_manageable(&self) -> bool {
@@ -424,7 +424,7 @@ pub fn enumerate_windows() -> Vec<NativeWindow> {
     windows
 }
 
-/// Every window Tilex is willing to manage.
+/// Every window WinTilex is willing to manage.
 pub fn enumerate_manageable() -> Vec<NativeWindow> {
     enumerate_windows().into_iter().filter(|w| w.is_manageable()).collect()
 }

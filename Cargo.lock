@@ -3809,32 +3809,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "tilex"
-version = "0.1.0"
-dependencies = [
- "env_logger",
- "log",
- "serde",
- "serde_json",
- "tauri",
- "tauri-build",
- "tauri-plugin-opener",
- "tilex-core",
-]
-
-[[package]]
-name = "tilex-core"
-version = "0.1.0"
-dependencies = [
- "log",
- "parking_lot",
- "serde",
- "serde_json",
- "thiserror 2.0.20",
- "windows 0.62.2",
-]
-
-[[package]]
 name = "time"
 version = "0.3.55"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4935,6 +4909,32 @@ checksum = "cb5a765337c50e9ec252c2069be9bf91c7df47afb103b642ba3a53bf8101be97"
 dependencies = [
  "cfg-if",
  "windows-sys 0.59.0",
+]
+
+[[package]]
+name = "wintilex"
+version = "0.1.0"
+dependencies = [
+ "env_logger",
+ "log",
+ "serde",
+ "serde_json",
+ "tauri",
+ "tauri-build",
+ "tauri-plugin-opener",
+ "wintilex-core",
+]
+
+[[package]]
+name = "wintilex-core"
+version = "0.1.0"
+dependencies = [
+ "log",
+ "parking_lot",
+ "serde",
+ "serde_json",
+ "thiserror 2.0.20",
+ "windows 0.62.2",
 ]
 
 [[package]]

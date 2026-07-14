@@ -4,8 +4,8 @@ use tauri::menu::{CheckMenuItem, Menu, MenuItem, PredefinedMenuItem, Submenu};
 use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
 use tauri::{AppHandle, Emitter, Manager, Runtime};
 
-use tilex_core::command::Action;
-use tilex_core::LayoutKind;
+use wintilex_core::command::Action;
+use wintilex_core::LayoutKind;
 
 const ID_TILING: &str = "tiling";
 const ID_RETILE: &str = "retile";
@@ -54,15 +54,15 @@ pub fn build<R: Runtime>(app: &AppHandle<R>, tiling_enabled: bool) -> tauri::Res
             &PredefinedMenuItem::separator(app)?,
             &MenuItem::with_id(app, ID_SETTINGS, "Settings…", true, None::<&str>)?,
             &PredefinedMenuItem::separator(app)?,
-            &MenuItem::with_id(app, ID_QUIT, "Quit Tilex", true, None::<&str>)?,
+            &MenuItem::with_id(app, ID_QUIT, "Quit WinTilex", true, None::<&str>)?,
         ],
     )?;
 
     app.manage(TrayState { tiling: tiling.clone() });
 
-    TrayIconBuilder::with_id("tilex")
+    TrayIconBuilder::with_id("wintilex")
         .icon(app.default_window_icon().cloned().expect("bundled icon"))
-        .tooltip("Tilex")
+        .tooltip("WinTilex")
         .menu(&menu)
         // The menu is on right click only, so a left click can open settings.
         .show_menu_on_left_click(false)
@@ -110,7 +110,7 @@ fn dispatch<R: Runtime>(app: &AppHandle<R>, action: Action) {
         state.engine.dispatch(action);
     }
     // The checkbox and the window both mirror manager state, so nudge the UI.
-    let _ = app.emit_to("settings", "tilex://changed", ());
+    let _ = app.emit_to("settings", "wintilex://changed", ());
 }
 
 pub fn show_settings<R: Runtime>(app: &AppHandle<R>) {

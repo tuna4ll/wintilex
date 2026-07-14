@@ -6,11 +6,11 @@
 use serde::Serialize;
 use tauri::State;
 
-use tilex_core::command::Action;
-use tilex_core::config::Config;
-use tilex_core::manager::{EngineHandle, Snapshot};
-use tilex_core::platform::autostart;
-use tilex_core::LayoutKind;
+use wintilex_core::command::Action;
+use wintilex_core::config::Config;
+use wintilex_core::manager::{EngineHandle, Snapshot};
+use wintilex_core::platform::autostart;
+use wintilex_core::LayoutKind;
 
 pub struct AppState {
     pub engine: EngineHandle,
@@ -136,15 +136,15 @@ pub fn preview_layout(
     count: usize,
     width: i32,
     height: i32,
-    options: tilex_core::LayoutOptions,
-) -> Vec<tilex_core::Rect> {
-    let area = tilex_core::Rect::new(0, 0, width, height);
-    tilex_core::layout::arrange(
+    options: wintilex_core::LayoutOptions,
+) -> Vec<wintilex_core::Rect> {
+    let area = wintilex_core::Rect::new(0, 0, width, height);
+    wintilex_core::layout::arrange(
         layout.build().as_ref(),
         area,
         count,
         &options,
-        &tilex_core::layout::Ratios::new(),
+        &wintilex_core::layout::Ratios::new(),
     )
     .tiles
 }

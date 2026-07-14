@@ -139,7 +139,7 @@ unsafe extern "system" fn hook_proc(code: i32, wparam: WPARAM, lparam: LPARAM) -
     let event = unsafe { &*(lparam.0 as *const KBDLLHOOKSTRUCT) };
     let is_key_down = wparam.0 as u32 == WM_KEYDOWN || wparam.0 as u32 == WM_SYSKEYDOWN;
 
-    // Keys Tilex itself synthesized must not be looked at again.
+    // Keys WinTilex itself synthesized must not be looked at again.
     let injected = event.flags.0 & LLKHF_INJECTED.0 != 0;
 
     if is_key_down && !injected {

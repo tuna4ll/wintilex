@@ -8,7 +8,7 @@ use crate::layout::{Arrangement, LayoutKind, Ratios};
 use crate::platform::monitor::{Monitor, MonitorId};
 use crate::platform::window::{NativeWindow, WindowId};
 
-/// A window Tilex is tracking.
+/// A window WinTilex is tracking.
 #[derive(Debug, Clone, Serialize)]
 pub struct ManagedWindow {
     #[serde(serialize_with = "serialize_id")]

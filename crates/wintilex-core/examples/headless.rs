@@ -5,7 +5,7 @@
 fn main() {
     #[cfg(windows)]
     {
-        use tilex_core::{config::Config, manager::Engine};
+        use wintilex_core::{config::Config, manager::Engine};
 
         let seconds: u64 =
             std::env::args().nth(1).and_then(|value| value.parse().ok()).unwrap_or(10);

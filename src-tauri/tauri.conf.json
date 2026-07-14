@@ -1,8 +1,8 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "Tilex",
+  "productName": "WinTilex",
   "version": "0.1.0",
-  "identifier": "com.tunakilic.tilex",
+  "identifier": "com.tunakilic.wintilex",
   "build": {
     "beforeDevCommand": "npm run dev",
     "devUrl": "http://localhost:5183",
@@ -12,7 +12,7 @@
   "app": {
     "windows": [
       {
-        "title": "Tilex",
+        "title": "WinTilex",
         "label": "settings",
         "width": 960,
         "height": 660,
@@ -28,10 +28,10 @@
       "csp": "default-src 'self'; style-src 'self' 'unsafe-inline'"
     },
     "trayIcon": {
-      "id": "tilex",
+      "id": "wintilex",
       "iconPath": "icons/tray.png",
       "iconAsTemplate": false,
-      "tooltip": "Tilex"
+      "tooltip": "WinTilex"
     }
   },
   "bundle": {
