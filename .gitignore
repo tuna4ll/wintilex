@@ -4,7 +4,6 @@ dist/
 *.local
 
 target/
-Cargo.lock
 
 src-tauri/gen/
 
