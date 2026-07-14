@@ -57,7 +57,12 @@ export function hotkeysView(
         "td",
         {},
         issue
-          ? el("span", { class: "pill", title: issue.reason }, "unavailable")
+          ? el(
+              "span",
+              { class: "row-control" },
+              el("span", { class: "pill" }, "inactive"),
+              el("small", { class: "dim" }, issue.reason),
+            )
           : hotkey.disabled
             ? el("span", { class: "pill" }, "off")
             : el("span", { class: "pill on" }, "active"),
@@ -109,8 +114,9 @@ export function hotkeysView(
         el(
           "div",
           { class: "warning" },
-          `${issues.length} binding${issues.length === 1 ? "" : "s"} could not be registered. ` +
-            "Switching the capture method to the keyboard hook on the General page usually fixes this.",
+          `${issues.length} binding${issues.length === 1 ? "" : "s"} ${issues.length === 1 ? "is" : "are"} not active. ` +
+            "Bindings left to Windows are the shell shortcuts Tilex refuses to swallow; " +
+            "give them a different combination, or turn the protection off on the General page.",
         ),
       el(
         "table",

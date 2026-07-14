@@ -15,6 +15,7 @@ export interface General {
   "warp-cursor-to-focus": boolean;
   "absorb-manual-resize": boolean;
   "hotkey-backend": HotkeyBackend;
+  "protect-system-shortcuts": boolean;
 }
 
 export interface WindowRule {

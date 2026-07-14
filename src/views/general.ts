@@ -92,6 +92,14 @@ export function generalView(
           },
         ),
       ),
+      row(
+        "Leave Windows shortcuts alone",
+        "Keeps Win+Tab, Win+Ctrl+Arrow, Win+Space and Alt+Tab working. Turn this off only if you want Tilex to take them over.",
+        checkbox(general["protect-system-shortcuts"], (value) => {
+          general["protect-system-shortcuts"] = value;
+          onChange();
+        }),
+      ),
     ),
 
     card(
