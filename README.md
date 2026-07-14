@@ -42,15 +42,15 @@ cargo run -p tilex-core --example list_windows
 | `Win` + `H` `J` `K` `L`    | Move the focus left, down, up, right       |
 | `Win` `Shift` + `H`…`L`    | Swap the focused window with its neighbour |
 | `Win` `Ctrl` + `H`…`L`     | Grow the focused window that way           |
-| `Win` `Ctrl` + `←` `→`     | Send the window to the next display        |
-| `Win` + `Tab`              | Focus the next window                      |
-| `Win` + `Enter`            | Promote the window to first place          |
-| `Win` + `Space`            | Switch to the next layout                  |
-| `Win` `Shift` + `Space`    | Float or unfloat the focused window        |
-| `Win` `Shift` + `M`        | Mirror the layout                          |
-| `Win` `Shift` + `R`        | Forget every manual resize on this display |
-| `Win` `Ctrl` + `T`         | Pause or resume tiling                     |
-| `Win` `Shift` + `Q`        | Minimize the focused window                |
+| `Win` `Alt` + `J` / `K`     | Focus the next / previous window           |
+| `Win` `Alt` + `←` / `→`     | Send the window to the next display        |
+| `Win` `Alt` + `Enter`        | Promote the window to first place          |
+| `Win` `Alt` + `Space`        | Switch to the next layout                  |
+| `Win` `Alt` + `F`            | Float or unfloat the focused window        |
+| `Win` `Alt` + `X`            | Mirror the layout                          |
+| `Win` `Alt` + `Z`            | Forget every manual resize on this display |
+| `Win` `Alt` + `P`            | Pause or resume tiling                     |
+| `Win` `Alt` + `Q`            | Minimize the focused window                |
 
 To shrink a window, grow it in the opposite direction.
 
@@ -59,6 +59,25 @@ Windows reserves most `Win`+letter combinations for the shell, and
 low-level keyboard hook by default, which sees the key first and swallows it.
 The General page can switch to `RegisterHotKey` instead; the Hotkeys page then
 marks whatever Windows would not hand over.
+
+### Shortcuts Tilex leaves alone
+
+Seeing keys before the shell cuts both ways: a binding on the wrong combination
+would take a Windows feature away with no warning. Tilex therefore refuses to
+swallow the shortcuts the shell actually needs, whatever the config says:
+
+`Win`+`Tab`, `Win`+`Ctrl`+`←`/`→`/`D`/`F4`, `Win`+`Space`,
+`Win`+`Shift`+`Space`, `Win`+`D`, `Win`+`G`, `Win`+`Shift`+`S`,
+`Win`+`PrtScn`, `Alt`+`Tab`.
+
+Turn *Leave Windows shortcuts alone* off on the General page to take them over
+anyway. A config from an older build that still binds one of these has the
+binding moved to the current default for the same action on the next start.
+
+The directional keys are deliberately not on that list, so `Win`+`H`, `Win`+`K`
+and `Win`+`L` do belong to Tilex. That does mean **`Win`+`L` no longer locks the
+screen** while Tilex is running; rebind it on the Hotkeys page if you would
+rather keep the lock shortcut.
 
 ## Layouts
 
