@@ -25,7 +25,7 @@ use crate::command::Action;
 use crate::config::{Config, HotkeyBackend};
 use crate::hotkey::system_reserved;
 use crate::manager::state::Snapshot;
-use crate::manager::WindowManager;
+use crate::manager::{Reaction, WindowManager};
 use crate::platform::events::{EventHooks, WM_WINTILEX_EVENT};
 use crate::platform::hotkey::{FailedBinding, HotkeyRegistry};
 use crate::platform::keyboard::KeyboardHook;
@@ -56,12 +56,19 @@ pub struct EngineHandle {
     inner: Arc<Inner>,
 }
 
+/// Called on the manager thread every time the snapshot changes.
+///
+/// It runs inside the message loop, so it must do almost nothing: the bar only
+/// pokes its own thread awake and reads the snapshot back over there.
+pub type Listener = Box<dyn Fn() + Send + Sync + 'static>;
+
 struct Inner {
     /// Filled in by the manager thread once its message queue exists.
     thread_id: AtomicU32,
     sender: Sender<Message>,
     snapshot: RwLock<Snapshot>,
     failed_hotkeys: RwLock<Vec<FailedBinding>>,
+    listeners: RwLock<Vec<Listener>>,
 }
 
 impl EngineHandle {
@@ -80,6 +87,15 @@ impl EngineHandle {
     /// The most recent view of the desktop.
     pub fn snapshot(&self) -> Snapshot {
         self.inner.snapshot.read().clone()
+    }
+
+    /// Ask to be told whenever the snapshot changes.
+    ///
+    /// There is no way to take a listener back off again; the one thing that
+    /// subscribes is the bar, which is created once and then only starts and
+    /// stops the thread it wakes.
+    pub fn subscribe(&self, listener: Listener) {
+        self.inner.listeners.write().push(listener);
     }
 
     /// Bindings Windows would not give us, so the settings window can say so.
@@ -122,6 +138,7 @@ impl Engine {
             sender,
             snapshot: RwLock::new(snapshot),
             failed_hotkeys: RwLock::new(Vec::new()),
+            listeners: RwLock::new(Vec::new()),
         });
 
         let thread_state = Arc::clone(&shared);
@@ -174,7 +191,7 @@ fn run(config: Config, receiver: Receiver<Message>, shared: Arc<Inner>, ready: S
             break;
         }
 
-        let mut dirty = false;
+        let mut reaction = Reaction::IGNORED;
         let mut stop = false;
 
         match message.message {
@@ -184,7 +201,7 @@ fn run(config: Config, receiver: Receiver<Message>, shared: Arc<Inner>, ready: S
                     if action == Action::Quit {
                         stop = true;
                     } else {
-                        dirty |= manager.dispatch(action);
+                        reaction = reaction.merge(ran(manager.dispatch(action)));
                     }
                 }
             }
@@ -192,7 +209,9 @@ fn run(config: Config, receiver: Receiver<Message>, shared: Arc<Inner>, ready: S
                 while let Ok(incoming) = receiver.try_recv() {
                     match incoming {
                         Message::Run(Action::Quit) | Message::Shutdown => stop = true,
-                        Message::Run(action) => dirty |= manager.dispatch(action),
+                        Message::Run(action) => {
+                            reaction = reaction.merge(ran(manager.dispatch(action)))
+                        }
                         Message::ApplyConfig(config) => {
                             let backend = config.general.hotkey_backend;
                             manager.set_config(*config);
@@ -200,21 +219,21 @@ fn run(config: Config, receiver: Receiver<Message>, shared: Arc<Inner>, ready: S
                             hotkeys.rebind(&manager, &shared);
                             follow_timer =
                                 set_follow_timer(follow_timer, manager.focus_follows_mouse());
-                            dirty = true;
+                            reaction = Reaction::RELAYOUT;
                         }
                     }
                 }
             }
             WM_WINTILEX_EVENT => {
                 for event in hooks.drain() {
-                    dirty |= manager.handle_event(event);
+                    reaction = reaction.merge(manager.handle_event(event));
                 }
                 for action in hotkeys.drain() {
                     log::debug!("hotkey -> {action:?}");
                     if action == Action::Quit {
                         stop = true;
                     } else {
-                        dirty |= manager.dispatch(action);
+                        reaction = reaction.merge(ran(manager.dispatch(action)));
                     }
                 }
             }
@@ -232,7 +251,7 @@ fn run(config: Config, receiver: Receiver<Message>, shared: Arc<Inner>, ready: S
                 } else if fired == housekeeping_timer {
                     manager.refresh_monitors();
                     manager.refresh();
-                    dirty = true;
+                    reaction = Reaction::RELAYOUT;
                 }
             }
             WM_QUIT => stop = true,
@@ -246,11 +265,11 @@ fn run(config: Config, receiver: Receiver<Message>, shared: Arc<Inner>, ready: S
             break;
         }
 
-        if dirty {
+        if reaction.view {
             publish(&manager, &shared);
-            if relayout_timer.is_none() {
-                relayout_timer = Some(unsafe { SetTimer(None, 0, RELAYOUT_DELAY_MS, None) });
-            }
+        }
+        if reaction.relayout && relayout_timer.is_none() {
+            relayout_timer = Some(unsafe { SetTimer(None, 0, RELAYOUT_DELAY_MS, None) });
         }
     }
 
@@ -361,6 +380,21 @@ impl Hotkeys {
 
 fn publish(manager: &WindowManager, shared: &Arc<Inner>) {
     *shared.snapshot.write() = manager.snapshot();
+    for listener in shared.listeners.read().iter() {
+        listener();
+    }
+}
+
+/// What running an action means for the loop.
+///
+/// Even the actions that move nothing, such as changing the focus, leave the
+/// snapshot different from what anyone watching it last saw.
+fn ran(relayout: bool) -> Reaction {
+    if relayout {
+        Reaction::RELAYOUT
+    } else {
+        Reaction::VIEW
+    }
 }
 
 /// Start or stop the focus-follows-mouse poll, returning the live timer id.

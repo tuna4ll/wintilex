@@ -14,9 +14,9 @@ use windows::Win32::UI::Accessibility::{SetWinEventHook, UnhookWinEvent, HWINEVE
 use windows::Win32::UI::WindowsAndMessaging::{
     PostThreadMessageW, CHILDID_SELF, EVENT_OBJECT_CLOAKED, EVENT_OBJECT_DESTROY,
     EVENT_OBJECT_HIDE, EVENT_OBJECT_LOCATIONCHANGE, EVENT_OBJECT_SHOW, EVENT_OBJECT_UNCLOAKED,
-    EVENT_SYSTEM_FOREGROUND, EVENT_SYSTEM_MINIMIZEEND, EVENT_SYSTEM_MINIMIZESTART,
-    EVENT_SYSTEM_MOVESIZEEND, EVENT_SYSTEM_MOVESIZESTART, OBJID_WINDOW, WINEVENT_OUTOFCONTEXT,
-    WINEVENT_SKIPOWNPROCESS,
+    EVENT_OBJECT_NAMECHANGE, EVENT_SYSTEM_FOREGROUND, EVENT_SYSTEM_MINIMIZEEND,
+    EVENT_SYSTEM_MINIMIZESTART, EVENT_SYSTEM_MOVESIZEEND, EVENT_SYSTEM_MOVESIZESTART, OBJID_WINDOW,
+    WINEVENT_OUTOFCONTEXT, WINEVENT_SKIPOWNPROCESS,
 };
 
 use crate::platform::window::WindowId;
@@ -41,6 +41,9 @@ pub enum DesktopEvent {
     DragFinished(WindowId),
     /// A window moved or resized without the user dragging it.
     Moved(WindowId),
+    /// A window changed its title. Nothing moves, but anything showing the
+    /// title has to be redrawn.
+    Renamed(WindowId),
     /// Displays were added, removed or rearranged.
     DisplayChanged,
 }
@@ -68,7 +71,9 @@ impl EventHooks {
             (EVENT_SYSTEM_MOVESIZESTART, EVENT_SYSTEM_MOVESIZEEND),
             (EVENT_SYSTEM_MINIMIZESTART, EVENT_SYSTEM_MINIMIZEEND),
             (EVENT_OBJECT_DESTROY, EVENT_OBJECT_HIDE),
-            (EVENT_OBJECT_LOCATIONCHANGE, EVENT_OBJECT_LOCATIONCHANGE),
+            // `LOCATIONCHANGE` and `NAMECHANGE` sit next to each other, so the
+            // titles come in without paying for another hook.
+            (EVENT_OBJECT_LOCATIONCHANGE, EVENT_OBJECT_NAMECHANGE),
             (EVENT_OBJECT_CLOAKED, EVENT_OBJECT_UNCLOAKED),
         ];
 
@@ -152,15 +157,18 @@ unsafe extern "system" fn callback(
         EVENT_SYSTEM_MOVESIZESTART => DesktopEvent::DragStarted(id),
         EVENT_SYSTEM_MOVESIZEEND => DesktopEvent::DragFinished(id),
         EVENT_OBJECT_LOCATIONCHANGE => DesktopEvent::Moved(id),
+        EVENT_OBJECT_NAMECHANGE => DesktopEvent::Renamed(id),
         _ => return,
     };
 
     QUEUE.with(|queue| {
         let mut queue = queue.borrow_mut();
         // Location changes arrive by the hundred while a window is being
-        // dragged. Collapsing the repeats keeps the queue from growing without
-        // losing the fact that the window moved.
-        if matches!(translated, DesktopEvent::Moved(_)) && queue.back() == Some(&translated) {
+        // dragged, and a title that is being typed into repeats just as fast.
+        // Collapsing the repeats keeps the queue from growing without losing
+        // the fact that something happened.
+        let repeatable = matches!(translated, DesktopEvent::Moved(_) | DesktopEvent::Renamed(_));
+        if repeatable && queue.back() == Some(&translated) {
             return;
         }
         queue.push_back(translated);

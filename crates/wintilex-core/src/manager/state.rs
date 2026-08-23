@@ -150,6 +150,11 @@ pub struct MonitorView {
     pub is_primary: bool,
     pub layout: LayoutKind,
     pub tiled_windows: usize,
+    /// The tiling order on this display. The bar draws its window list from
+    /// this, so it has to be the order the layout used, not the alphabetical
+    /// one [`Snapshot::windows`] is sorted into.
+    pub order: Vec<String>,
+    pub reversed: bool,
 }
 
 fn serialize_optional_id<S: serde::Serializer>(
