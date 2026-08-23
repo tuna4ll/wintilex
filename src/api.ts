@@ -64,22 +64,44 @@ export interface BarTheme {
   accent: string;
   "accent-text": string;
   urgent: string;
+  layout: string;
+  monitor: string;
+  cpu: string;
+  memory: string;
+  battery: string;
+  clock: string;
+}
+
+export interface BarIcons {
+  layout: string;
+  monitor: string;
+  paused: string;
+  cpu: string;
+  memory: string;
+  battery: string;
+  "battery-charging": string;
+  clock: string;
 }
 
 export interface BarConfig {
   enabled: boolean;
   position: BarPosition;
   height: number;
+  margin: number;
+  radius: number;
   opacity: number;
   "reserve-space": boolean;
   "primary-only": boolean;
   "font-family": string;
   "font-size": number;
+  icons: boolean;
+  "icon-font": string;
   "clock-format": string;
   left: BarModule[];
   center: BarModule[];
   right: BarModule[];
   theme: BarTheme;
+  glyphs: BarIcons;
 }
 
 export interface Config {

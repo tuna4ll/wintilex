@@ -9,13 +9,24 @@ const SLOTS: { value: BarSlot; label: string }[] = [
 ];
 
 const THEME_ROWS: { key: keyof Config["bar"]["theme"]; label: string; hint: string }[] = [
-  { key: "background", label: "Background", hint: "The bar itself." },
+  { key: "background", label: "Group", hint: "Fill behind each group of modules." },
   { key: "foreground", label: "Text", hint: "Anything meant to be read at a glance." },
-  { key: "muted", label: "Dimmed text", hint: "The clock, the readings, minimized windows." },
+  { key: "muted", label: "Dimmed text", hint: "Minimized windows and the display number." },
   { key: "surface", label: "Window pill", hint: "Behind a window that is not focused." },
   { key: "accent", label: "Focused window", hint: "The pill behind whatever has the focus." },
-  { key: "accent-text", label: "Text on accent", hint: "Reads on top of the two colours above." },
+  { key: "accent-text", label: "Text on a pill", hint: "Reads on top of the two colours above." },
   { key: "urgent", label: "Warning", hint: "Tiling paused, and a battery about to run out." },
+];
+
+/** One accent per module. Colouring the icons is most of what gives a bar its
+ *  character, so they are grouped on their own. */
+const ACCENT_ROWS: { key: keyof Config["bar"]["theme"]; label: string }[] = [
+  { key: "layout", label: "Layout" },
+  { key: "monitor", label: "Display number" },
+  { key: "cpu", label: "CPU" },
+  { key: "memory", label: "Memory" },
+  { key: "battery", label: "Battery" },
+  { key: "clock", label: "Clock" },
 ];
 
 export function barView(
@@ -60,9 +71,25 @@ export function barView(
       ),
       row(
         "Height",
-        "In pixels, scaled up on a high-DPI display.",
-        number(bar.height, 16, 96, (value) => {
+        "The whole strip, margins included, in pixels.",
+        number(bar.height, 20, 120, (value) => {
           bar.height = value;
+          onChange();
+        }),
+      ),
+      row(
+        "Margin",
+        "Space between the groups and the edge of the strip. Above zero the bar floats over the wallpaper instead of touching the screen edge.",
+        number(bar.margin, 0, 40, (value) => {
+          bar.margin = value;
+          onChange();
+        }),
+      ),
+      row(
+        "Corner radius",
+        "How round a group is.",
+        number(bar.radius, 0, 40, (value) => {
+          bar.radius = value;
           onChange();
         }),
       ),
@@ -123,9 +150,25 @@ export function barView(
       ),
       row(
         "Font size",
-        "In points.",
+        "In pixels.",
         number(bar["font-size"], 6, 32, (value) => {
           bar["font-size"] = value;
+          onChange();
+        }),
+      ),
+      row(
+        "Icons",
+        "A glyph in front of each module.",
+        checkbox(bar.icons, (value) => {
+          bar.icons = value;
+          onChange();
+        }),
+      ),
+      row(
+        "Icon font",
+        "Ships with Windows. Point it at a Nerd Font and put its glyphs in the config file to use those instead.",
+        text(bar["icon-font"], "Segoe Fluent Icons", (value) => {
+          bar["icon-font"] = value;
           onChange();
         }),
       ),
@@ -145,6 +188,25 @@ export function barView(
         row(
           entry.label,
           entry.hint,
+          colour(bar.theme[entry.key], (value) => {
+            bar.theme[entry.key] = value;
+            onChange();
+          }),
+        ),
+      ),
+    ),
+
+    card(
+      "Module accents",
+      el(
+        "p",
+        { class: "card-note" },
+        "The colour each module's icon is drawn in.",
+      ),
+      ...ACCENT_ROWS.map((entry) =>
+        row(
+          entry.label,
+          null,
           colour(bar.theme[entry.key], (value) => {
             bar.theme[entry.key] = value;
             onChange();
