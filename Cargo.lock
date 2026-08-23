@@ -4926,6 +4926,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "wintilex-bar"
+version = "0.1.0"
+dependencies = [
+ "log",
+ "parking_lot",
+ "windows 0.62.2",
+ "windows-numerics 0.3.1",
+ "wintilex-core",
+]
+
+[[package]]
 name = "wintilex-core"
 version = "0.1.0"
 dependencies = [
