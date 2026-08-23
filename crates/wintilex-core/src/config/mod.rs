@@ -4,6 +4,7 @@
 //! file is not an error: every field has a default, so WinTilex starts with a
 //! working setup and fills the gaps back in on the next save.
 
+pub mod bar;
 pub mod rules;
 
 use std::io;
@@ -16,6 +17,7 @@ use crate::geometry::Direction;
 use crate::hotkey::Binding;
 use crate::layout::{LayoutKind, LayoutOptions};
 
+pub use bar::{BarConfig, BarModule, BarPosition, BarTheme};
 pub use rules::{RuleAction, WindowFacts, WindowRule};
 
 pub const APP_DIR: &str = "WinTilex";
@@ -101,6 +103,7 @@ pub struct Config {
     pub layout: LayoutKind,
     #[serde(flatten)]
     pub layout_options: LayoutOptions,
+    pub bar: BarConfig,
     pub hotkeys: Vec<Hotkey>,
     pub rules: Vec<WindowRule>,
 }
@@ -133,6 +136,7 @@ impl Default for Config {
             general: General::default(),
             layout: LayoutKind::default(),
             layout_options: LayoutOptions::default(),
+            bar: BarConfig::default(),
             hotkeys: default_hotkeys(),
             rules: rules::defaults(),
         }
