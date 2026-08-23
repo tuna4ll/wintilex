@@ -157,6 +157,13 @@ body {
   border-bottom: 1px solid var(--border);
 }
 
+.card-note {
+  margin: 0;
+  padding: 10px 14px;
+  color: var(--text-dim);
+  border-bottom: 1px solid var(--border);
+}
+
 .row {
   display: flex;
   align-items: center;
@@ -256,6 +263,16 @@ input[type="checkbox"] {
   width: 15px;
   height: 15px;
   accent-color: var(--accent);
+}
+
+input[type="color"].swatch {
+  width: 42px;
+  height: 24px;
+  padding: 2px;
+  background: var(--surface);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius);
+  cursor: pointer;
 }
 
 /* Tables ---------------------------------------------------------------- */

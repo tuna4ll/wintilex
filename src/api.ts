@@ -40,6 +40,48 @@ export interface Hotkey {
   disabled: boolean;
 }
 
+export type BarPosition = "top" | "bottom";
+
+export type BarModule =
+  | "layout"
+  | "windows"
+  | "title"
+  | "tiling"
+  | "monitor"
+  | "cpu"
+  | "memory"
+  | "battery"
+  | "clock";
+
+/** Where a module sits on the bar, or nowhere. */
+export type BarSlot = "off" | "left" | "center" | "right";
+
+export interface BarTheme {
+  background: string;
+  foreground: string;
+  muted: string;
+  surface: string;
+  accent: string;
+  "accent-text": string;
+  urgent: string;
+}
+
+export interface BarConfig {
+  enabled: boolean;
+  position: BarPosition;
+  height: number;
+  opacity: number;
+  "reserve-space": boolean;
+  "primary-only": boolean;
+  "font-family": string;
+  "font-size": number;
+  "clock-format": string;
+  left: BarModule[];
+  center: BarModule[];
+  right: BarModule[];
+  theme: BarTheme;
+}
+
 export interface Config {
   general: General;
   layout: LayoutKind;
@@ -47,6 +89,7 @@ export interface Config {
   "outer-gap": number;
   "main-ratio": number;
   reversed: boolean;
+  bar: BarConfig;
   hotkeys: Hotkey[];
   rules: WindowRule[];
 }
@@ -75,6 +118,9 @@ export interface MonitorView {
   isPrimary: boolean;
   layout: LayoutKind;
   tiledWindows: number;
+  /** Window ids in tiling order. */
+  order: string[];
+  reversed: boolean;
 }
 
 export interface Snapshot {
@@ -93,6 +139,7 @@ export interface Environment {
   version: string;
   configPath: string;
   layouts: { id: LayoutKind; label: string }[];
+  barModules: { id: BarModule; label: string }[];
   autostartEnabled: boolean;
 }
 
@@ -104,3 +151,5 @@ export const getHotkeyIssues = () => invoke<HotkeyIssue[]>("get_hotkey_issues");
 export const getEnvironment = () => invoke<Environment>("get_environment");
 export const revealConfig = () => invoke<void>("reveal_config");
 export const runAction = (action: Action) => invoke<void>("run_action", { action });
+export const setBarEnabled = (enabled: boolean) =>
+  invoke<Config>("set_bar_enabled", { enabled });

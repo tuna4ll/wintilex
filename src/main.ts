@@ -1,5 +1,7 @@
 import "./styles.css";
 
+import { listen } from "@tauri-apps/api/event";
+
 import {
   getConfig,
   getEnvironment,
@@ -8,23 +10,26 @@ import {
   resetConfig,
   revealConfig,
   saveConfig,
+  setBarEnabled,
   type Config,
   type Environment,
   type HotkeyIssue,
   type Snapshot,
 } from "./api";
 import { clear, el } from "./dom";
+import { barView } from "./views/bar";
 import { generalView } from "./views/general";
 import { hotkeysView } from "./views/hotkeys";
 import { layoutView } from "./views/layout";
 import { rulesView } from "./views/rules";
 import { windowsView } from "./views/windows";
 
-type Page = "general" | "layout" | "hotkeys" | "rules" | "windows";
+type Page = "general" | "layout" | "bar" | "hotkeys" | "rules" | "windows";
 
 const PAGES: { id: Page; label: string }[] = [
   { id: "general", label: "General" },
   { id: "layout", label: "Layout" },
+  { id: "bar", label: "Bar" },
   { id: "hotkeys", label: "Hotkeys" },
   { id: "rules", label: "Rules" },
   { id: "windows", label: "Windows" },
@@ -55,6 +60,28 @@ async function boot(): Promise<void> {
   window.setInterval(() => {
     void refreshSnapshot();
   }, SNAPSHOT_INTERVAL_MS);
+
+  // The tray menu writes to the same file this window is editing, so pick the
+  // change up rather than saving over it later.
+  await listen("wintilex://changed", () => {
+    void reload();
+  });
+}
+
+/** Showing or hiding the bar happens on the spot: waiting for Apply to find
+ *  out what a bar even looks like is a poor way to decide whether to keep one.
+ *  The switch is written straight to the file, as the tray menu does. */
+async function toggleBar(enabled: boolean): Promise<void> {
+  config.bar.enabled = enabled;
+  await setBarEnabled(enabled);
+  render();
+}
+
+async function reload(): Promise<void> {
+  // Half-typed settings are worth more than being in step with the tray.
+  if (dirty) return;
+  config = await getConfig();
+  render();
 }
 
 async function refreshSnapshot(): Promise<void> {
@@ -145,6 +172,11 @@ function content(): HTMLElement {
       break;
     case "layout":
       container.appendChild(layoutView(config, environment, markDirty));
+      break;
+    case "bar":
+      container.appendChild(
+        barView(config, environment, markDirty, (enabled) => void toggleBar(enabled)),
+      );
       break;
     case "hotkeys":
       container.appendChild(hotkeysView(config, issues, markDirty, render));
