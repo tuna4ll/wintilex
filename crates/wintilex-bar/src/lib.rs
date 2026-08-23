@@ -27,9 +27,9 @@ use parking_lot::{Mutex, RwLock};
 
 use windows::core::w;
 use windows::Win32::Foundation::{COLORREF, HWND, LPARAM, LRESULT, WPARAM};
-use windows::Win32::Graphics::Direct2D::ID2D1HwndRenderTarget;
+use windows::Win32::Graphics::Direct2D::ID2D1DCRenderTarget;
 use windows::Win32::Graphics::DirectWrite::IDWriteTextFormat;
-use windows::Win32::Graphics::Gdi::{InvalidateRect, ValidateRect};
+use windows::Win32::Graphics::Gdi::{BeginPaint, EndPaint, InvalidateRect, HDC, PAINTSTRUCT};
 use windows::Win32::System::LibraryLoader::GetModuleHandleW;
 use windows::Win32::System::Threading::GetCurrentThreadId;
 use windows::Win32::UI::WindowsAndMessaging::{
@@ -245,7 +245,7 @@ struct BarWindow {
     number: usize,
     scale: f32,
     rect: Rect,
-    target: Option<ID2D1HwndRenderTarget>,
+    target: Option<ID2D1DCRenderTarget>,
     hits: HitBoxes,
     /// Whether the shell took the appbar registration.
     reserved: bool,
@@ -253,6 +253,7 @@ struct BarWindow {
 
 impl Drop for BarWindow {
     fn drop(&mut self) {
+        log::debug!("closing the bar on {}", self.monitor);
         if self.reserved {
             appbar::unregister(self.hwnd);
         }
@@ -375,6 +376,7 @@ impl Bar {
                 let _ = ShowWindow(hwnd, SW_SHOWNOACTIVATE);
             }
 
+            log::debug!("bar on {} at {rect:?}, space reserved: {reserved}", monitor.id);
             self.windows.push(BarWindow {
                 hwnd,
                 monitor: monitor.id.clone(),
@@ -442,7 +444,7 @@ impl Bar {
         self.windows.iter().position(|window| window.hwnd == hwnd)
     }
 
-    fn paint(&mut self, hwnd: HWND) {
+    fn paint(&mut self, hwnd: HWND, hdc: HDC) {
         let Some(index) = self.index_of(hwnd) else {
             return;
         };
@@ -452,7 +454,7 @@ impl Bar {
 
         let size = (self.windows[index].rect.width, self.windows[index].rect.height);
         if self.windows[index].target.is_none() {
-            self.windows[index].target = self.painter.target(hwnd, size);
+            self.windows[index].target = self.painter.target();
         }
         let Some(target) = self.windows[index].target.clone() else {
             return;
@@ -479,10 +481,10 @@ impl Bar {
         let painted = paint::draw(
             &self.painter,
             &target,
+            (hdc, size),
             (&fonts.0, &fonts.1),
             &self.palette,
             &sections,
-            (size.0 as f32, size.1 as f32),
             window.scale,
         );
 
@@ -648,9 +650,16 @@ unsafe extern "system" fn window_proc(
         WM_MOUSEACTIVATE => return LRESULT(MA_NOACTIVATE as isize),
         WM_ERASEBKGND => return LRESULT(1),
         WM_PAINT => {
-            with_bar(|bar| bar.paint(hwnd));
+            // Direct2D presents the frame itself, but the paint still has to
+            // sit inside a `BeginPaint`/`EndPaint` pair: without one the update
+            // region is never cleared and the composited window stays empty.
+            let mut paint = PAINTSTRUCT::default();
             unsafe {
-                let _ = ValidateRect(Some(hwnd), None);
+                BeginPaint(hwnd, &mut paint);
+            }
+            with_bar(|bar| bar.paint(hwnd, paint.hdc));
+            unsafe {
+                let _ = EndPaint(hwnd, &paint);
             }
             return LRESULT(0);
         }

@@ -1,22 +1,21 @@
 //! Direct2D drawing.
 //!
 //! The bar is one strip of text and a handful of rounded rectangles, so it
-//! draws straight onto an `ID2D1HwndRenderTarget` instead of going anywhere
-//! near a browser engine. Everything here works in physical pixels: the render
-//! target is pinned to 96 DPI and the caller multiplies by the scale factor of
-//! the display it is drawing on.
+//! draws straight onto the device context of its window instead of going
+//! anywhere near a browser engine. Everything here works in physical pixels:
+//! the render target is pinned to 96 DPI and the caller multiplies by the
+//! scale factor of the display it is drawing on.
 
 use windows::core::HSTRING;
-use windows::Win32::Foundation::{D2DERR_RECREATE_TARGET, HWND};
+use windows::Win32::Foundation::{D2DERR_RECREATE_TARGET, RECT};
 use windows::Win32::Graphics::Direct2D::Common::{
-    D2D1_ALPHA_MODE_IGNORE, D2D1_COLOR_F, D2D1_PIXEL_FORMAT, D2D_RECT_F, D2D_SIZE_U,
+    D2D1_ALPHA_MODE_IGNORE, D2D1_COLOR_F, D2D1_PIXEL_FORMAT, D2D_RECT_F,
 };
 use windows::Win32::Graphics::Direct2D::{
-    D2D1CreateFactory, ID2D1Factory, ID2D1HwndRenderTarget, ID2D1SolidColorBrush,
+    D2D1CreateFactory, ID2D1DCRenderTarget, ID2D1Factory, ID2D1SolidColorBrush,
     D2D1_DRAW_TEXT_OPTIONS_CLIP, D2D1_FACTORY_TYPE_SINGLE_THREADED, D2D1_FEATURE_LEVEL_DEFAULT,
-    D2D1_HWND_RENDER_TARGET_PROPERTIES, D2D1_PRESENT_OPTIONS_IMMEDIATELY,
-    D2D1_RENDER_TARGET_PROPERTIES, D2D1_RENDER_TARGET_TYPE_DEFAULT, D2D1_RENDER_TARGET_USAGE_NONE,
-    D2D1_ROUNDED_RECT,
+    D2D1_RENDER_TARGET_PROPERTIES, D2D1_RENDER_TARGET_TYPE_DEFAULT,
+    D2D1_RENDER_TARGET_USAGE_GDI_COMPATIBLE, D2D1_ROUNDED_RECT,
 };
 use windows::Win32::Graphics::DirectWrite::{
     DWriteCreateFactory, IDWriteFactory, IDWriteTextFormat, IDWriteTextLayout,
@@ -26,6 +25,7 @@ use windows::Win32::Graphics::DirectWrite::{
     DWRITE_WORD_WRAPPING_NO_WRAP,
 };
 use windows::Win32::Graphics::Dxgi::Common::DXGI_FORMAT_B8G8R8A8_UNORM;
+use windows::Win32::Graphics::Gdi::HDC;
 use windows_numerics::Vector2;
 
 use wintilex_core::geometry::Rect;
@@ -61,8 +61,17 @@ impl Painter {
         Some(Painter { d2d, dwrite })
     }
 
-    /// A render target bound to one bar window.
-    pub fn target(&self, hwnd: HWND, size: (i32, i32)) -> Option<ID2D1HwndRenderTarget> {
+    /// A render target that draws onto a device context.
+    ///
+    /// The obvious choice would be an HWND render target, which owns a swap
+    /// chain of its own. On a bar it is the wrong one: a window that never
+    /// takes the focus and only ever covers a strip of the screen is reported
+    /// back as occluded, and an occluded swap chain quietly presents nothing
+    /// while `EndDraw` still says everything went fine. Drawing onto the device
+    /// context from `BeginPaint` goes through the same path every other window
+    /// on the desktop uses, and the surface is tiny enough that nothing is lost
+    /// by it.
+    pub fn target(&self) -> Option<ID2D1DCRenderTarget> {
         let properties = D2D1_RENDER_TARGET_PROPERTIES {
             r#type: D2D1_RENDER_TARGET_TYPE_DEFAULT,
             pixelFormat: D2D1_PIXEL_FORMAT {
@@ -72,16 +81,11 @@ impl Painter {
             // Pinned, so a segment laid out at 30 pixels is 30 pixels.
             dpiX: 96.0,
             dpiY: 96.0,
-            usage: D2D1_RENDER_TARGET_USAGE_NONE,
+            usage: D2D1_RENDER_TARGET_USAGE_GDI_COMPATIBLE,
             minLevel: D2D1_FEATURE_LEVEL_DEFAULT,
         };
-        let window = D2D1_HWND_RENDER_TARGET_PROPERTIES {
-            hwnd,
-            pixelSize: D2D_SIZE_U { width: size.0.max(1) as u32, height: size.1.max(1) as u32 },
-            presentOptions: D2D1_PRESENT_OPTIONS_IMMEDIATELY,
-        };
 
-        unsafe { self.d2d.CreateHwndRenderTarget(&properties, &window) }
+        unsafe { self.d2d.CreateDCRenderTarget(&properties) }
             .map_err(|error| log::error!("no render target: {error}"))
             .ok()
     }
@@ -170,14 +174,21 @@ pub struct Painted {
 /// Draw one bar and report back what the user can click on.
 pub fn draw(
     painter: &Painter,
-    target: &ID2D1HwndRenderTarget,
+    target: &ID2D1DCRenderTarget,
+    surface: (HDC, (i32, i32)),
     fonts: (&IDWriteTextFormat, &IDWriteTextFormat),
     palette: &Palette,
     sections: &Sections,
-    size: (f32, f32),
     scale: f32,
 ) -> Painted {
-    let (width, height) = size;
+    let (hdc, pixels) = surface;
+    let bounds = RECT { left: 0, top: 0, right: pixels.0, bottom: pixels.1 };
+    if let Err(error) = unsafe { target.BindDC(hdc, &bounds) } {
+        log::warn!("the bar could not be bound to its window: {error}");
+        return Painted { hits: Vec::new(), device_lost: true };
+    }
+
+    let (width, height) = (pixels.0 as f32, pixels.1 as f32);
     let edge = EDGE_PADDING * scale;
     let gap = SEGMENT_GAP * scale;
 
