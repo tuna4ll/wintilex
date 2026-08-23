@@ -241,7 +241,12 @@ impl Config {
         match std::fs::read_to_string(path) {
             Ok(text) => {
                 let mut config: Config = serde_json::from_str(&text)?;
-                if config.migrate() > 0 {
+                // The version is what says whether anything was carried over.
+                // A migration that moves no hotkeys still rewrites sections, so
+                // counting moves would leave those to happen again every start.
+                let stale = config.version < CONFIG_VERSION;
+                config.migrate();
+                if stale {
                     // Write the result straight back, so the migration happens
                     // once rather than on every start.
                     if let Err(error) = config.save_to(path) {
@@ -478,6 +483,29 @@ mod tests {
             ],
             ..Default::default()
         }
+    }
+
+    #[test]
+    fn an_old_bar_section_starts_again_but_keeps_its_switch() {
+        let mut config = Config {
+            version: 2,
+            bar: BarConfig { enabled: true, height: 32, margin: 0, ..Default::default() },
+            ..Default::default()
+        };
+        config.migrate();
+
+        // The one thing worth carrying over is whether the user wanted a bar.
+        assert!(config.bar.enabled);
+        assert_eq!(config.bar.height, BarConfig::default().height);
+        assert_eq!(config.bar.margin, BarConfig::default().margin);
+        assert_eq!(config.version, CONFIG_VERSION);
+    }
+
+    #[test]
+    fn a_bar_that_was_off_stays_off() {
+        let mut config = Config { version: 2, ..Default::default() };
+        config.migrate();
+        assert!(!config.bar.enabled);
     }
 
     #[test]
