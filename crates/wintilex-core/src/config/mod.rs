@@ -24,7 +24,7 @@ pub const APP_DIR: &str = "WinTilex";
 pub const CONFIG_FILE: &str = "config.json";
 
 /// Current shape of the configuration. See [`Config::version`].
-pub const CONFIG_VERSION: u32 = 2;
+pub const CONFIG_VERSION: u32 = 3;
 
 /// What a file that predates the version field reads as.
 fn no_version() -> u32 {
@@ -265,6 +265,14 @@ impl Config {
     fn migrate(&mut self) -> usize {
         if self.version >= CONFIG_VERSION {
             return 0;
+        }
+
+        // The first bar was a plain strip along the edge and its settings were
+        // sized for that. Carrying a height meant for a strip onto a bar made
+        // of floating groups leaves no room inside them, so that section starts
+        // again from the current defaults rather than being half-converted.
+        if self.version < 3 {
+            self.bar = BarConfig { enabled: self.bar.enabled, ..BarConfig::default() };
         }
 
         let current = default_hotkeys();
