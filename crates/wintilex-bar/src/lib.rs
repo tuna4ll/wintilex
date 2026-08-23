@@ -650,9 +650,8 @@ unsafe extern "system" fn window_proc(
         WM_MOUSEACTIVATE => return LRESULT(MA_NOACTIVATE as isize),
         WM_ERASEBKGND => return LRESULT(1),
         WM_PAINT => {
-            // Direct2D presents the frame itself, but the paint still has to
-            // sit inside a `BeginPaint`/`EndPaint` pair: without one the update
-            // region is never cleared and the composited window stays empty.
+            // `BeginPaint` is what hands over the device context Direct2D draws
+            // onto, so the whole frame happens between it and `EndPaint`.
             let mut paint = PAINTSTRUCT::default();
             unsafe {
                 BeginPaint(hwnd, &mut paint);

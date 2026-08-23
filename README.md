@@ -30,6 +30,12 @@ npm run tauri build    # installers land in target/release/bundle
 Requires Rust (stable, MSVC toolchain), Node 18 or newer, and the WebView2
 runtime, which ships with Windows 11.
 
+Run WinTilex through one of those two commands, or from the installer they
+build. A debug binary started on its own — `target\debug\wintilex.exe` — loads
+its interface from the Vite dev server rather than from disk, so without
+`npm run tauri dev` running alongside it the settings window is only a browser
+error page, and it keeps the console open for the logs.
+
 The window management can also be run on its own, without any UI:
 
 ```
