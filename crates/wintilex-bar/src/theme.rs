@@ -4,6 +4,8 @@ use windows::Win32::Graphics::Direct2D::Common::D2D1_COLOR_F;
 
 use wintilex_core::config::BarTheme;
 
+use crate::segments::Tone;
+
 #[derive(Debug, Clone, Copy)]
 pub struct Palette {
     pub background: D2D1_COLOR_F,
@@ -13,6 +15,12 @@ pub struct Palette {
     pub accent: D2D1_COLOR_F,
     pub accent_text: D2D1_COLOR_F,
     pub urgent: D2D1_COLOR_F,
+    layout: D2D1_COLOR_F,
+    monitor: D2D1_COLOR_F,
+    cpu: D2D1_COLOR_F,
+    memory: D2D1_COLOR_F,
+    battery: D2D1_COLOR_F,
+    clock: D2D1_COLOR_F,
 }
 
 impl Palette {
@@ -28,6 +36,27 @@ impl Palette {
             accent: parse(&theme.accent, &fallback.accent),
             accent_text: parse(&theme.accent_text, &fallback.accent_text),
             urgent: parse(&theme.urgent, &fallback.urgent),
+            layout: parse(&theme.layout, &fallback.layout),
+            monitor: parse(&theme.monitor, &fallback.monitor),
+            cpu: parse(&theme.cpu, &fallback.cpu),
+            memory: parse(&theme.memory, &fallback.memory),
+            battery: parse(&theme.battery, &fallback.battery),
+            clock: parse(&theme.clock, &fallback.clock),
+        }
+    }
+
+    /// The accent a module's icon is drawn in.
+    pub fn tone(&self, tone: Tone) -> D2D1_COLOR_F {
+        match tone {
+            Tone::Text => self.foreground,
+
+            Tone::Urgent => self.urgent,
+            Tone::Layout => self.layout,
+            Tone::Monitor => self.monitor,
+            Tone::Cpu => self.cpu,
+            Tone::Memory => self.memory,
+            Tone::Battery => self.battery,
+            Tone::Clock => self.clock,
         }
     }
 }
@@ -62,6 +91,12 @@ fn colour(value: &str) -> Option<D2D1_COLOR_F> {
     })
 }
 
+/// The same colour at a different opacity, for a pill that should only just be
+/// there.
+pub fn fade(colour: D2D1_COLOR_F, alpha: f32) -> D2D1_COLOR_F {
+    D2D1_COLOR_F { a: colour.a * alpha, ..colour }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -84,5 +119,13 @@ mod tests {
         assert!(colour("").is_none());
         assert!(colour("#12345").is_none());
         assert!(colour("#gggggg").is_none());
+    }
+
+    #[test]
+    fn a_broken_colour_falls_back_to_its_own_default() {
+        let theme = BarTheme { accent: "nonsense".into(), ..Default::default() };
+        let palette = Palette::from_theme(&theme);
+        let default = Palette::from_theme(&BarTheme::default());
+        assert_eq!(palette.accent.r, default.accent.r);
     }
 }

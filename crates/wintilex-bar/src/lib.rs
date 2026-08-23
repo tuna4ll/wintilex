@@ -6,6 +6,10 @@
 //! engine: tiles are already computed against the work area, so a bar that
 //! reserves its strip is simply never drawn under.
 //!
+//! The windows are layered and painted through `UpdateLayeredWindow`, which is
+//! what lets the bar be a row of rounded, translucent groups floating clear of
+//! the screen edge rather than a solid strip stuck to it.
+//!
 //! Like the manager, the bar owns a thread with a message loop, because Win32
 //! ties windows to the thread that created them. Everything outside talks to it
 //! through [`BarHandle`], which starts and stops that thread and hands it a new
@@ -26,20 +30,20 @@ use std::thread::{self, JoinHandle};
 use parking_lot::{Mutex, RwLock};
 
 use windows::core::w;
-use windows::Win32::Foundation::{COLORREF, HWND, LPARAM, LRESULT, WPARAM};
-use windows::Win32::Graphics::Direct2D::ID2D1DCRenderTarget;
+use windows::Win32::Foundation::{HWND, LPARAM, LRESULT, WPARAM};
 use windows::Win32::Graphics::DirectWrite::IDWriteTextFormat;
-use windows::Win32::Graphics::Gdi::{BeginPaint, EndPaint, InvalidateRect, HDC, PAINTSTRUCT};
+use windows::Win32::Graphics::Gdi::ValidateRect;
+use windows::Win32::System::Com::{CoInitializeEx, CoUninitialize, COINIT_APARTMENTTHREADED};
 use windows::Win32::System::LibraryLoader::GetModuleHandleW;
 use windows::Win32::System::Threading::GetCurrentThreadId;
 use windows::Win32::UI::WindowsAndMessaging::{
     CreateWindowExW, DefWindowProcW, DestroyWindow, DispatchMessageW, GetMessageW, KillTimer,
-    LoadCursorW, PeekMessageW, PostThreadMessageW, RegisterClassW, SetLayeredWindowAttributes,
-    SetTimer, SetWindowPos, ShowWindow, TranslateMessage, HWND_BOTTOM, HWND_TOPMOST, IDC_ARROW,
-    LWA_ALPHA, MA_NOACTIVATE, MSG, PM_NOREMOVE, SWP_NOACTIVATE, SWP_NOMOVE, SWP_NOSIZE,
-    SW_SHOWNOACTIVATE, WM_APP, WM_DISPLAYCHANGE, WM_DPICHANGED, WM_ERASEBKGND, WM_LBUTTONUP,
-    WM_MOUSEACTIVATE, WM_PAINT, WM_TIMER, WM_USER, WNDCLASSW, WS_EX_LAYERED, WS_EX_NOACTIVATE,
-    WS_EX_TOOLWINDOW, WS_EX_TOPMOST, WS_POPUP,
+    LoadCursorW, PeekMessageW, PostThreadMessageW, RegisterClassW, SetTimer, SetWindowPos,
+    ShowWindow, TranslateMessage, HWND_BOTTOM, HWND_TOPMOST, IDC_ARROW, MA_NOACTIVATE, MSG,
+    PM_NOREMOVE, SWP_NOACTIVATE, SWP_NOMOVE, SWP_NOSIZE, SW_SHOWNOACTIVATE, WM_APP,
+    WM_DISPLAYCHANGE, WM_DPICHANGED, WM_ERASEBKGND, WM_LBUTTONUP, WM_MOUSEACTIVATE, WM_PAINT,
+    WM_TIMER, WM_USER, WNDCLASSW, WS_EX_LAYERED, WS_EX_NOACTIVATE, WS_EX_TOOLWINDOW, WS_EX_TOPMOST,
+    WS_POPUP,
 };
 
 use wintilex_core::command::Action;
@@ -49,8 +53,8 @@ use wintilex_core::manager::EngineHandle;
 use wintilex_core::platform::monitor::{enumerate_monitors, MonitorId};
 use wintilex_core::platform::window::NativeWindow;
 
-use paint::{HitBoxes, Painter};
-use segments::{Act, Readings, Sections};
+use paint::{Fonts, HitBoxes, Metrics, Painter, Surface};
+use segments::{Act, Readings};
 use system::Cpu;
 use theme::Palette;
 
@@ -172,6 +176,8 @@ fn run(shared: Arc<Shared>, ready: Sender<()>) {
     unsafe {
         let mut probe = MSG::default();
         let _ = PeekMessageW(&mut probe, None, WM_USER, WM_USER, PM_NOREMOVE);
+        // The imaging factory the drawing goes through is a COM object.
+        let _ = CoInitializeEx(None, COINIT_APARTMENTTHREADED);
     }
     shared.thread_id.store(unsafe { GetCurrentThreadId() }, Ordering::Release);
     let _ = ready.send(());
@@ -195,6 +201,7 @@ fn run(shared: Arc<Shared>, ready: Sender<()>) {
     }
 
     shared.thread_id.store(0, Ordering::Release);
+    unsafe { CoUninitialize() };
     // The strip the bar was using is free again, so put the tiles back over it.
     shared.engine.dispatch(Action::Retile);
     log::info!("bar thread stopped");
@@ -211,7 +218,7 @@ fn pump() {
         // Thread messages arrive without a window and never need dispatching.
         match message.message {
             WM_BAR_STOP => return,
-            WM_BAR_WAKE => with_bar(|bar| bar.invalidate()),
+            WM_BAR_WAKE => with_bar(|bar| bar.redraw()),
             WM_BAR_RELOAD => with_bar(|bar| bar.rebuild()),
             WM_TIMER if message.hwnd.is_invalid() => with_bar(|bar| bar.tick()),
             _ => unsafe {
@@ -224,8 +231,8 @@ fn pump() {
 
 /// Run something against the bars on this thread.
 ///
-/// Re-entrancy is real here: painting a window can end up back inside the
-/// window procedure. Anything that arrives while the bar is already borrowed is
+/// Re-entrancy is real here: closing a window ends up back inside the window
+/// procedure. Anything that arrives while the bar is already borrowed is
 /// dropped rather than allowed to panic.
 fn with_bar(action: impl FnOnce(&mut Bar)) {
     BAR.with(|cell| {
@@ -237,6 +244,13 @@ fn with_bar(action: impl FnOnce(&mut Bar)) {
     });
 }
 
+/// The text formats one bar draws with, at the scale of its display.
+struct FontSet {
+    text: IDWriteTextFormat,
+    bold: IDWriteTextFormat,
+    icon: Option<IDWriteTextFormat>,
+}
+
 /// One bar window, and the drawing state that belongs to it.
 struct BarWindow {
     hwnd: HWND,
@@ -245,7 +259,8 @@ struct BarWindow {
     number: usize,
     scale: f32,
     rect: Rect,
-    target: Option<ID2D1DCRenderTarget>,
+    fonts: Option<FontSet>,
+    surface: Option<Surface>,
     hits: HitBoxes,
     /// Whether the shell took the appbar registration.
     reserved: bool,
@@ -268,7 +283,6 @@ struct Bar {
     painter: Painter,
     config: BarConfig,
     palette: Palette,
-    fonts: Option<(IDWriteTextFormat, IDWriteTextFormat)>,
     windows: Vec<BarWindow>,
     cpu: Cpu,
     readings: Readings,
@@ -282,7 +296,6 @@ impl Bar {
             shared,
             painter,
             palette: Palette::from_theme(&config.theme),
-            fonts: None,
             config,
             windows: Vec::new(),
             cpu: Cpu::default(),
@@ -296,7 +309,6 @@ impl Bar {
     fn rebuild(&mut self) {
         self.config = self.shared.config.read().clone();
         self.palette = Palette::from_theme(&self.config.theme);
-        self.fonts = self.build_fonts();
 
         // Dropping the old windows hands back their appbar slots first.
         self.windows.clear();
@@ -313,17 +325,13 @@ impl Bar {
 
             let scale = monitor.scale();
             let height = self.config.scaled_height(scale);
-            let opacity = self.config.window_opacity();
-
-            let mut style = WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE | WS_EX_TOPMOST;
-            if opacity < 1.0 {
-                style |= WS_EX_LAYERED;
-            }
-
             let proposed = strip(monitor.bounds, self.config.position, height);
+
             let hwnd = unsafe {
                 CreateWindowExW(
-                    style,
+                    // Layered is what `UpdateLayeredWindow` needs; the rest
+                    // keep the bar off the taskbar and out of the focus.
+                    WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE | WS_EX_TOPMOST | WS_EX_LAYERED,
                     CLASS_NAME,
                     w!("WinTilex bar"),
                     WS_POPUP,
@@ -342,17 +350,6 @@ impl Bar {
                 continue;
             };
 
-            if opacity < 1.0 {
-                unsafe {
-                    let _ = SetLayeredWindowAttributes(
-                        hwnd,
-                        COLORREF(0),
-                        (opacity * 255.0) as u8,
-                        LWA_ALPHA,
-                    );
-                }
-            }
-
             // With the space reserved the shell decides where the strip ends
             // up, which is how the bar stays clear of a taskbar on the same
             // edge. Without it the bar floats inside the work area instead.
@@ -363,68 +360,88 @@ impl Bar {
                 strip(monitor.work_area, self.config.position, height)
             };
 
-            unsafe {
-                let _ = SetWindowPos(
-                    hwnd,
-                    Some(HWND_TOPMOST),
-                    rect.x,
-                    rect.y,
-                    rect.width,
-                    rect.height,
-                    SWP_NOACTIVATE,
-                );
-                let _ = ShowWindow(hwnd, SW_SHOWNOACTIVATE);
-            }
-
-            log::debug!("bar on {} at {rect:?}, space reserved: {reserved}", monitor.id);
             self.windows.push(BarWindow {
                 hwnd,
                 monitor: monitor.id.clone(),
                 number: index + 1,
                 scale,
                 rect,
-                target: None,
+                fonts: self.build_fonts(scale),
+                surface: None,
                 hits: Vec::new(),
                 reserved,
             });
+
+            log::debug!("bar on {} at {rect:?}, space reserved: {reserved}", monitor.id);
+        }
+
+        self.sample();
+        self.redraw();
+
+        for window in &self.windows {
+            unsafe {
+                let _ = ShowWindow(window.hwnd, SW_SHOWNOACTIVATE);
+                let _ = SetWindowPos(
+                    window.hwnd,
+                    Some(HWND_TOPMOST),
+                    0,
+                    0,
+                    0,
+                    0,
+                    SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE,
+                );
+            }
         }
 
         log::info!("bar showing on {} display(s)", self.windows.len());
-        self.tick();
         // The work area just moved under the manager's feet.
         self.shared.engine.dispatch(Action::Retile);
     }
 
-    fn build_fonts(&self) -> Option<(IDWriteTextFormat, IDWriteTextFormat)> {
+    /// Text formats for one display. Sizes are in pixels on a render target
+    /// pinned to 96 DPI, so the scale factor has to be folded in here.
+    fn build_fonts(&self, scale: f32) -> Option<FontSet> {
         let family = &self.config.font_family;
-        let size = self.config.font_size;
-        Some((
-            self.painter.text_format(family, size, false)?,
-            self.painter.text_format(family, size, true)?,
-        ))
+        let size = self.config.font_size * scale;
+        let icon = self.config.icons.then(|| {
+            self.painter.text_format(
+                &self.config.icon_font,
+                paint::icon_size(self.config.font_size) * scale,
+                false,
+            )
+        });
+
+        Some(FontSet {
+            text: self.painter.text_format(family, size, false)?,
+            bold: self.painter.text_format(family, size, true)?,
+            icon: icon.flatten(),
+        })
     }
 
     /// Re-read the clock and the machine, and redraw if anything moved.
     fn tick(&mut self) {
-        let clock = if self.uses(BarModule::Clock) {
+        let before = (self.clock.clone(), self.readings);
+        self.sample();
+
+        // A clock showing hours and minutes changes twice an hour, so the bar
+        // sits still between them instead of repainting every second.
+        if before != (self.clock.clone(), self.readings) {
+            self.redraw();
+        }
+    }
+
+    fn sample(&mut self) {
+        self.clock = if self.uses(BarModule::Clock) {
             system::clock(&self.config.clock_format)
         } else {
             String::new()
         };
 
-        let readings = Readings {
+        self.readings = Readings {
             cpu: if self.uses(BarModule::Cpu) { self.cpu.sample() } else { 0 },
             memory: if self.uses(BarModule::Memory) { system::memory_load() } else { 0 },
             battery: self.uses(BarModule::Battery).then(system::battery).flatten(),
         };
-
-        // A clock showing hours and minutes changes twice an hour, so the bar
-        // sits still between them instead of repainting every second.
-        if clock != self.clock || readings != self.readings {
-            self.clock = clock;
-            self.readings = readings;
-            self.invalidate();
-        }
     }
 
     fn uses(&self, module: BarModule) -> bool {
@@ -432,71 +449,60 @@ impl Bar {
         sections.iter().any(|section| section.contains(&module))
     }
 
-    fn invalidate(&self) {
-        for window in &self.windows {
-            unsafe {
-                let _ = InvalidateRect(Some(window.hwnd), None, false);
+    /// Draw every bar and hand the results to the desktop.
+    fn redraw(&mut self) {
+        let snapshot = self.shared.engine.snapshot();
+
+        for index in 0..self.windows.len() {
+            let size = (self.windows[index].rect.width, self.windows[index].rect.height);
+            if !self.windows[index].surface.as_ref().is_some_and(|s| s.matches(size)) {
+                self.windows[index].surface = self.painter.surface(size);
             }
+
+            let window = &self.windows[index];
+            let (Some(surface), Some(fonts)) = (&window.surface, &window.fonts) else {
+                continue;
+            };
+
+            let sections = snapshot
+                .monitors
+                .iter()
+                .find(|view| view.id == window.monitor)
+                .map(|view| {
+                    segments::build(
+                        &snapshot,
+                        &self.config,
+                        view,
+                        window.number,
+                        &self.readings,
+                        &self.clock,
+                    )
+                })
+                .unwrap_or_default();
+
+            let metrics = Metrics {
+                margin: self.config.margin as f32 * window.scale,
+                radius: self.config.radius as f32 * window.scale,
+                line: self.config.font_size * 1.8 * window.scale,
+                scale: window.scale,
+            };
+
+            let hits = paint::draw(
+                &self.painter,
+                surface,
+                &Fonts { text: &fonts.text, bold: &fonts.bold, icon: fonts.icon.as_ref() },
+                &self.palette,
+                &sections,
+                metrics,
+            );
+            surface.present(window.hwnd, window.rect, self.config.window_opacity());
+
+            self.windows[index].hits = hits;
         }
     }
 
     fn index_of(&self, hwnd: HWND) -> Option<usize> {
         self.windows.iter().position(|window| window.hwnd == hwnd)
-    }
-
-    fn paint(&mut self, hwnd: HWND, hdc: HDC) {
-        let Some(index) = self.index_of(hwnd) else {
-            return;
-        };
-        let Some(fonts) = self.fonts.as_ref() else {
-            return;
-        };
-
-        let size = (self.windows[index].rect.width, self.windows[index].rect.height);
-        if self.windows[index].target.is_none() {
-            self.windows[index].target = self.painter.target();
-        }
-        let Some(target) = self.windows[index].target.clone() else {
-            return;
-        };
-
-        let snapshot = self.shared.engine.snapshot();
-        let window = &self.windows[index];
-        let sections = snapshot
-            .monitors
-            .iter()
-            .find(|view| view.id == window.monitor)
-            .map(|view| {
-                segments::build(
-                    &snapshot,
-                    &self.config,
-                    view,
-                    window.number,
-                    &self.readings,
-                    &self.clock,
-                )
-            })
-            .unwrap_or_else(Sections::default);
-
-        let painted = paint::draw(
-            &self.painter,
-            &target,
-            (hdc, size),
-            (&fonts.0, &fonts.1),
-            &self.palette,
-            &sections,
-            window.scale,
-        );
-
-        self.windows[index].hits = painted.hits;
-        if painted.device_lost {
-            // Dropping the target is the only way back: the next paint builds
-            // a new one against whatever device is there now.
-            self.windows[index].target = None;
-            unsafe {
-                let _ = InvalidateRect(Some(hwnd), None, false);
-            }
-        }
     }
 
     fn click(&mut self, hwnd: HWND, x: i32, y: i32) {
@@ -558,8 +564,7 @@ impl Bar {
     fn appbar_message(&mut self, hwnd: HWND, notification: usize, flag: isize) {
         match notification {
             appbar::ABN_FULLSCREENAPP => {
-                let behind = flag != 0;
-                let after = if behind { HWND_BOTTOM } else { HWND_TOPMOST };
+                let after = if flag != 0 { HWND_BOTTOM } else { HWND_TOPMOST };
                 unsafe {
                     let _ = SetWindowPos(
                         hwnd,
@@ -591,21 +596,10 @@ impl Bar {
             return;
         }
 
-        unsafe {
-            let _ = SetWindowPos(
-                hwnd,
-                Some(HWND_TOPMOST),
-                rect.x,
-                rect.y,
-                rect.width,
-                rect.height,
-                SWP_NOACTIVATE,
-            );
-        }
-        appbar::moved(hwnd);
-
         self.windows[index].rect = rect;
-        self.windows[index].target = None;
+        self.windows[index].surface = None;
+        self.redraw();
+        appbar::moved(hwnd);
     }
 }
 
@@ -649,16 +643,11 @@ unsafe extern "system" fn window_proc(
         // bar is describing.
         WM_MOUSEACTIVATE => return LRESULT(MA_NOACTIVATE as isize),
         WM_ERASEBKGND => return LRESULT(1),
+        // A layered window is given its pixels by `UpdateLayeredWindow`, so
+        // there is nothing to paint here; the region just has to be cleared.
         WM_PAINT => {
-            // `BeginPaint` is what hands over the device context Direct2D draws
-            // onto, so the whole frame happens between it and `EndPaint`.
-            let mut paint = PAINTSTRUCT::default();
             unsafe {
-                BeginPaint(hwnd, &mut paint);
-            }
-            with_bar(|bar| bar.paint(hwnd, paint.hdc));
-            unsafe {
-                let _ = EndPaint(hwnd, &paint);
+                let _ = ValidateRect(Some(hwnd), None);
             }
             return LRESULT(0);
         }
