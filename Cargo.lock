@@ -4922,6 +4922,7 @@ dependencies = [
  "tauri",
  "tauri-build",
  "tauri-plugin-opener",
+ "wintilex-bar",
  "wintilex-core",
 ]
 

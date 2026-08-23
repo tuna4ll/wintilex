@@ -6,14 +6,16 @@
 use serde::Serialize;
 use tauri::State;
 
+use wintilex_bar::BarHandle;
 use wintilex_core::command::Action;
-use wintilex_core::config::Config;
+use wintilex_core::config::{BarModule, Config};
 use wintilex_core::manager::{EngineHandle, Snapshot};
 use wintilex_core::platform::autostart;
 use wintilex_core::LayoutKind;
 
 pub struct AppState {
     pub engine: EngineHandle,
+    pub bar: BarHandle,
     /// Mirrors `general.minimize-to-tray` so the close handler can read it
     /// without going through the manager thread.
     pub close_to_tray: std::sync::atomic::AtomicBool,
@@ -42,7 +44,15 @@ pub struct Environment {
     pub version: String,
     pub config_path: String,
     pub layouts: Vec<LayoutInfo>,
+    pub bar_modules: Vec<BarModuleInfo>,
     pub autostart_enabled: bool,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct BarModuleInfo {
+    pub id: BarModule,
+    pub label: String,
 }
 
 #[tauri::command]
@@ -64,8 +74,24 @@ pub fn save_config(state: State<'_, AppState>, config: Config) -> CommandResult<
         log::error!("could not update the startup entry: {error}");
     }
 
+    // The bar first: it may hand a strip of the screen back or take one away,
+    // and the manager should lay the windows out against the work area it is
+    // going to end up with.
+    state.bar.apply(config.bar.clone());
     state.engine.apply_config(config);
     Ok(())
+}
+
+/// Turn the bar on or off on its own, for the tray menu and the switch on the
+/// bar page. The change is written to the file like any other setting.
+#[tauri::command]
+pub fn set_bar_enabled(state: State<'_, AppState>, enabled: bool) -> CommandResult<Config> {
+    let mut config = Config::load_or_default();
+    config.bar.enabled = enabled;
+    config.save().map_err(|error| error.to_string())?;
+
+    state.bar.apply(config.bar.clone());
+    Ok(config)
 }
 
 /// Write the defaults back out, for when a config has been edited into a corner.
@@ -73,6 +99,7 @@ pub fn save_config(state: State<'_, AppState>, config: Config) -> CommandResult<
 pub fn reset_config(state: State<'_, AppState>) -> CommandResult<Config> {
     let config = Config::default();
     config.save().map_err(|error| error.to_string())?;
+    state.bar.apply(config.bar.clone());
     state.engine.apply_config(config.clone());
     Ok(config)
 }
@@ -80,8 +107,10 @@ pub fn reset_config(state: State<'_, AppState>) -> CommandResult<Config> {
 #[tauri::command]
 pub fn get_snapshot(app: tauri::AppHandle, state: State<'_, AppState>) -> Snapshot {
     let snapshot = state.engine.snapshot();
-    // Cheapest place to notice that a hotkey toggled tiling behind our back.
+    // Cheapest place to notice that a hotkey toggled tiling, or that the bar
+    // page turned the bar off, behind the tray menu's back.
     crate::tray::sync_tiling_state(&app, snapshot.tiling_enabled);
+    crate::tray::sync_bar_state(&app, state.bar.is_running());
     snapshot
 }
 
@@ -111,6 +140,10 @@ pub fn get_environment() -> Environment {
         layouts: LayoutKind::ALL
             .iter()
             .map(|kind| LayoutInfo { id: *kind, label: kind.label().to_string() })
+            .collect(),
+        bar_modules: BarModule::ALL
+            .iter()
+            .map(|module| BarModuleInfo { id: *module, label: module.label().to_string() })
             .collect(),
         autostart_enabled: autostart::is_enabled(),
     }
