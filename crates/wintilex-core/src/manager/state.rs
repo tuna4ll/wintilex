@@ -145,7 +145,7 @@ pub struct Snapshot {
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct MonitorView {
-    pub id: String,
+    pub id: MonitorId,
     pub work_area: Rect,
     pub is_primary: bool,
     pub layout: LayoutKind,
@@ -153,8 +153,13 @@ pub struct MonitorView {
     /// The tiling order on this display. The bar draws its window list from
     /// this, so it has to be the order the layout used, not the alphabetical
     /// one [`Snapshot::windows`] is sorted into.
-    pub order: Vec<String>,
+    #[serde(serialize_with = "serialize_ids")]
+    pub order: Vec<WindowId>,
     pub reversed: bool,
+}
+
+fn serialize_ids<S: serde::Serializer>(ids: &[WindowId], serializer: S) -> Result<S::Ok, S::Error> {
+    serializer.collect_seq(ids.iter().map(|id| id.to_string()))
 }
 
 fn serialize_optional_id<S: serde::Serializer>(

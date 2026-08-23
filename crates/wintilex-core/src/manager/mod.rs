@@ -346,7 +346,7 @@ impl WindowManager {
                 .workspaces
                 .iter()
                 .map(|workspace| MonitorView {
-                    id: workspace.monitor.id.to_string(),
+                    id: workspace.monitor.id.clone(),
                     work_area: workspace.monitor.work_area,
                     is_primary: workspace.monitor.is_primary,
                     layout: workspace.layout,
@@ -355,7 +355,7 @@ impl WindowManager {
                         .iter()
                         .filter(|id| self.windows.get(id).is_some_and(|w| w.is_tiled()))
                         .count(),
-                    order: workspace.order.iter().map(|id| id.to_string()).collect(),
+                    order: workspace.order.clone(),
                     reversed: workspace.reversed,
                 })
                 .collect(),
