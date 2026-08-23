@@ -128,8 +128,22 @@ way you left it.
 | Clock           | `%H` `%I` `%M` `%S` `%p` `%d` `%m` `%y` `%Y` `%a` `%b`.       |
 
 Each module sits on the left, in the middle or on the right, and the order
-inside a side is the order they were put there. Height, opacity, font and the
-seven theme colours are all in the same file as everything else.
+inside a side is the order they were put there. A side is drawn as one rounded
+group, and the three groups float clear of the screen edge rather than filling a
+strip: the bar window is layered and painted through `UpdateLayeredWindow`, so
+every pixel carries its own alpha and the wallpaper shows through the gaps with
+the corners antialiased.
+
+Icons come from *Segoe Fluent Icons*, which ships with Windows, so there is
+nothing to install. Point `icon-font` at a Nerd Font and paste its glyphs into
+the `glyphs` section to use those instead. `battery` and `battery-charging` are
+the first of ten glyphs running from empty to full.
+
+Every module has its own accent, which is where most of the character comes
+from: the icons are coloured while the text stays readable. Height, margin,
+corner radius, opacity, font and all thirteen colours are in the same file as
+everything else, and the shipped palette is a dark one in the style of the
+Linux tiling desktops the bar is modelled on.
 
 The bar registers itself with the shell as an appbar, which takes its strip out
 of the work area. Since the layouts are already computed against the work area,
