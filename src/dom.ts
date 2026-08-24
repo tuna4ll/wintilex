@@ -109,3 +109,24 @@ export function text(
     onChange: (event: Event) => onChange((event.target as HTMLInputElement).value),
   });
 }
+
+/** A colour swatch. The picker only speaks `#rrggbb`, which is what the bar
+ *  theme is written in; a hand-edited file may use short or alpha forms and
+ *  those are normalised on the way in. */
+export function colour(value: string, onChange: (value: string) => void): HTMLInputElement {
+  return el("input", {
+    type: "color",
+    class: "swatch",
+    value: normalizeColour(value),
+    onChange: (event: Event) => onChange((event.target as HTMLInputElement).value),
+  });
+}
+
+function normalizeColour(value: string): string {
+  const digits = value.trim().replace(/^#/, "");
+  if (digits.length === 3 || digits.length === 4) {
+    return `#${[...digits.slice(0, 3)].map((c) => c + c).join("")}`;
+  }
+  if (digits.length === 6 || digits.length === 8) return `#${digits.slice(0, 6)}`;
+  return "#000000";
+}

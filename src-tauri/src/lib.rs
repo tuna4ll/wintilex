@@ -10,6 +10,7 @@ use std::sync::atomic::Ordering;
 
 use tauri::{Manager, WindowEvent};
 
+use wintilex_bar::BarHandle;
 use wintilex_core::config::Config;
 use wintilex_core::manager::Engine;
 use wintilex_core::platform::{autostart, instance};
@@ -30,6 +31,8 @@ pub fn run() {
     let start_hidden = autostart::launched_at_startup();
     let tiling_enabled = config.general.tiling_enabled;
     let close_to_tray = config.general.minimize_to_tray;
+    let bar_config = config.bar.clone();
+    let bar_enabled = bar_config.enabled;
 
     // Make sure the registry entry matches what the config says, in case the
     // executable was moved since it was written.
@@ -39,10 +42,16 @@ pub fn run() {
 
     let engine = Engine::spawn(config);
 
+    // The bar subscribes to the manager here and stays subscribed; whether it
+    // is on the screen is decided by the configuration it is handed.
+    let bar = BarHandle::new(engine.clone());
+    bar.apply(bar_config);
+
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
         .manage(commands::AppState {
             engine: engine.clone(),
+            bar: bar.clone(),
             close_to_tray: std::sync::atomic::AtomicBool::new(close_to_tray),
         })
         .invoke_handler(tauri::generate_handler![
@@ -55,9 +64,10 @@ pub fn run() {
             commands::get_environment,
             commands::reveal_config,
             commands::preview_layout,
+            commands::set_bar_enabled,
         ])
         .setup(move |app| {
-            tray::build(app.handle(), tiling_enabled)?;
+            tray::build(app.handle(), tiling_enabled, bar_enabled)?;
             if !start_hidden {
                 tray::show_settings(app.handle());
             }
@@ -88,6 +98,10 @@ pub fn run() {
         .run(move |app, event| {
             if let tauri::RunEvent::ExitRequested { .. } = event {
                 if let Some(state) = app.try_state::<commands::AppState>() {
+                    // The bar goes first and is waited for: leaving without
+                    // handing the appbar slot back would leave a dead strip
+                    // along the edge of the screen until the next sign-in.
+                    state.bar.shutdown();
                     state.engine.shutdown();
                 }
             }
