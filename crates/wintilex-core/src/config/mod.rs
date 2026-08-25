@@ -4,6 +4,7 @@
 //! file is not an error: every field has a default, so WinTilex starts with a
 //! working setup and fills the gaps back in on the next save.
 
+pub mod bar;
 pub mod rules;
 
 use std::io;
@@ -16,13 +17,14 @@ use crate::geometry::Direction;
 use crate::hotkey::Binding;
 use crate::layout::{LayoutKind, LayoutOptions};
 
+pub use bar::{BarConfig, BarModule, BarPosition, BarTheme};
 pub use rules::{RuleAction, WindowFacts, WindowRule};
 
 pub const APP_DIR: &str = "WinTilex";
 pub const CONFIG_FILE: &str = "config.json";
 
 /// Current shape of the configuration. See [`Config::version`].
-pub const CONFIG_VERSION: u32 = 2;
+pub const CONFIG_VERSION: u32 = 3;
 
 /// What a file that predates the version field reads as.
 fn no_version() -> u32 {
@@ -101,6 +103,7 @@ pub struct Config {
     pub layout: LayoutKind,
     #[serde(flatten)]
     pub layout_options: LayoutOptions,
+    pub bar: BarConfig,
     pub hotkeys: Vec<Hotkey>,
     pub rules: Vec<WindowRule>,
 }
@@ -133,6 +136,7 @@ impl Default for Config {
             general: General::default(),
             layout: LayoutKind::default(),
             layout_options: LayoutOptions::default(),
+            bar: BarConfig::default(),
             hotkeys: default_hotkeys(),
             rules: rules::defaults(),
         }
@@ -237,7 +241,12 @@ impl Config {
         match std::fs::read_to_string(path) {
             Ok(text) => {
                 let mut config: Config = serde_json::from_str(&text)?;
-                if config.migrate() > 0 {
+                // The version is what says whether anything was carried over.
+                // A migration that moves no hotkeys still rewrites sections, so
+                // counting moves would leave those to happen again every start.
+                let stale = config.version < CONFIG_VERSION;
+                config.migrate();
+                if stale {
                     // Write the result straight back, so the migration happens
                     // once rather than on every start.
                     if let Err(error) = config.save_to(path) {
@@ -261,6 +270,14 @@ impl Config {
     fn migrate(&mut self) -> usize {
         if self.version >= CONFIG_VERSION {
             return 0;
+        }
+
+        // The first bar was a plain strip along the edge and its settings were
+        // sized for that. Carrying a height meant for a strip onto a bar made
+        // of floating groups leaves no room inside them, so that section starts
+        // again from the current defaults rather than being half-converted.
+        if self.version < 3 {
+            self.bar = BarConfig { enabled: self.bar.enabled, ..BarConfig::default() };
         }
 
         let current = default_hotkeys();
@@ -466,6 +483,29 @@ mod tests {
             ],
             ..Default::default()
         }
+    }
+
+    #[test]
+    fn an_old_bar_section_starts_again_but_keeps_its_switch() {
+        let mut config = Config {
+            version: 2,
+            bar: BarConfig { enabled: true, height: 32, margin: 0, ..Default::default() },
+            ..Default::default()
+        };
+        config.migrate();
+
+        // The one thing worth carrying over is whether the user wanted a bar.
+        assert!(config.bar.enabled);
+        assert_eq!(config.bar.height, BarConfig::default().height);
+        assert_eq!(config.bar.margin, BarConfig::default().margin);
+        assert_eq!(config.version, CONFIG_VERSION);
+    }
+
+    #[test]
+    fn a_bar_that_was_off_stays_off() {
+        let mut config = Config { version: 2, ..Default::default() };
+        config.migrate();
+        assert!(!config.bar.enabled);
     }
 
     #[test]

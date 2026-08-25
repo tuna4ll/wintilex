@@ -8,7 +8,7 @@ mod drag;
 mod engine;
 mod state;
 
-pub use drag::DragOutcome;
+pub use drag::{DragOutcome, Reaction};
 pub use engine::{Engine, EngineHandle};
 pub use state::{ManagedWindow, MonitorView, Snapshot, Workspace};
 
@@ -346,7 +346,7 @@ impl WindowManager {
                 .workspaces
                 .iter()
                 .map(|workspace| MonitorView {
-                    id: workspace.monitor.id.to_string(),
+                    id: workspace.monitor.id.clone(),
                     work_area: workspace.monitor.work_area,
                     is_primary: workspace.monitor.is_primary,
                     layout: workspace.layout,
@@ -355,6 +355,8 @@ impl WindowManager {
                         .iter()
                         .filter(|id| self.windows.get(id).is_some_and(|w| w.is_tiled()))
                         .count(),
+                    order: workspace.order.clone(),
+                    reversed: workspace.reversed,
                 })
                 .collect(),
             focused: self.focused,
@@ -756,6 +758,17 @@ impl WindowManager {
 
     pub fn forget_window(&mut self, id: WindowId) {
         self.forget(id);
+    }
+
+    /// Store a new title, reporting whether it actually changed.
+    pub fn rename_window(&mut self, id: WindowId, title: String) -> bool {
+        match self.windows.get_mut(&id) {
+            Some(window) if window.title != title => {
+                window.title = title;
+                true
+            }
+            _ => false,
+        }
     }
 
     pub fn update_minimized(&mut self, id: WindowId, minimized: bool) -> bool {

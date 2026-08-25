@@ -1,11 +1,11 @@
 [workspace]
-members = ["crates/wintilex-core", "src-tauri"]
+members = ["crates/wintilex-core", "crates/wintilex-bar", "src-tauri"]
 resolver = "2"
 
 [workspace.package]
 version = "0.1.0"
 edition = "2021"
-rust-version = "1.80"
+rust-version = "1.82"
 authors = ["Tuna Kılıç <tuna@tunakilic.com>"]
 license = "MIT"
 repository = "https://github.com/wintilex/wintilex"

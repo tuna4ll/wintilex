@@ -18,6 +18,40 @@ const EDGE_TOLERANCE: i32 = 8;
 /// How far a tiled window may drift from its tile before it is put back.
 const DRIFT_TOLERANCE: i32 = 24;
 
+/// What one desktop event asks for.
+///
+/// Moving windows and redrawing whatever is watching the manager are separate
+/// concerns: a window that only changed its title still has to reach the bar,
+/// but re-running the layout for it would be pure waste.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub struct Reaction {
+    /// The layout has to be applied again.
+    pub relayout: bool,
+    /// The snapshot changed.
+    pub view: bool,
+}
+
+impl Reaction {
+    /// Nothing to do.
+    pub const IGNORED: Reaction = Reaction { relayout: false, view: false };
+    /// Redraw, but leave the windows where they are.
+    pub const VIEW: Reaction = Reaction { relayout: false, view: true };
+    /// Lay the windows out again, which redraws as well.
+    pub const RELAYOUT: Reaction = Reaction { relayout: true, view: true };
+
+    fn relayout_if(needed: bool) -> Reaction {
+        if needed {
+            Reaction::RELAYOUT
+        } else {
+            Reaction::IGNORED
+        }
+    }
+
+    pub fn merge(self, other: Reaction) -> Reaction {
+        Reaction { relayout: self.relayout || other.relayout, view: self.view || other.view }
+    }
+}
+
 /// What the manager decided a finished drag meant.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum DragOutcome {
@@ -32,26 +66,55 @@ pub enum DragOutcome {
 }
 
 impl WindowManager {
-    /// Feed one desktop event in. Returns `true` if the layout needs re-running.
-    pub fn handle_event(&mut self, event: DesktopEvent) -> bool {
+    /// Feed one desktop event in and say what it asks for.
+    pub fn handle_event(&mut self, event: DesktopEvent) -> Reaction {
         match event {
-            DesktopEvent::Shown(id) => self.on_shown(id),
-            DesktopEvent::Hidden(id) | DesktopEvent::Destroyed(id) => self.on_gone(id),
-            DesktopEvent::Focused(id) => self.on_focused(id),
-            DesktopEvent::Minimized(id) => self.set_minimized(id, true),
-            DesktopEvent::Restored(id) => self.set_minimized(id, false),
+            DesktopEvent::Shown(id) => Reaction::relayout_if(self.on_shown(id)),
+            DesktopEvent::Hidden(id) | DesktopEvent::Destroyed(id) => {
+                Reaction::relayout_if(self.on_gone(id))
+            }
+            // A focus change never moves anything, but it does decide what the
+            // bar highlights, so it still has to be published.
+            DesktopEvent::Focused(id) => {
+                if self.on_focused(id) {
+                    Reaction::RELAYOUT
+                } else {
+                    Reaction::VIEW
+                }
+            }
+            DesktopEvent::Minimized(id) => Reaction::relayout_if(self.set_minimized(id, true)),
+            DesktopEvent::Restored(id) => Reaction::relayout_if(self.set_minimized(id, false)),
             DesktopEvent::DragStarted(id) => {
                 self.begin_drag(id);
-                false
+                Reaction::IGNORED
             }
-            DesktopEvent::DragFinished(id) => self.finish_drag(id) != DragOutcome::Ignored,
-            DesktopEvent::Moved(id) => self.on_moved(id),
+            DesktopEvent::DragFinished(id) => {
+                Reaction::relayout_if(self.finish_drag(id) != DragOutcome::Ignored)
+            }
+            DesktopEvent::Moved(id) => Reaction::relayout_if(self.on_moved(id)),
+            DesktopEvent::Renamed(id) => {
+                if self.on_renamed(id) {
+                    Reaction::VIEW
+                } else {
+                    Reaction::IGNORED
+                }
+            }
             DesktopEvent::DisplayChanged => {
                 self.refresh_monitors();
                 self.refresh();
-                true
+                Reaction::RELAYOUT
             }
         }
+    }
+
+    /// Pick up a new window title. Titles change while the user types, so this
+    /// only reports back when the text really is different.
+    fn on_renamed(&mut self, id: WindowId) -> bool {
+        if !self.is_tracked(id) {
+            return false;
+        }
+        let title = NativeWindow::from_id(id).title();
+        self.rename_window(id, title)
     }
 
     fn on_shown(&mut self, id: WindowId) -> bool {

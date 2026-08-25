@@ -16,6 +16,8 @@ thread; Tauri only provides the settings window and the tray icon.
   a hotkey.
 - Dragging a tile edge changes the split behind it instead of being undone on
   the next pass, so manual resizing sticks.
+- An optional bar along the edge of every display shows the layout, the windows
+  and the usual readings, and reserves its own space.
 
 ## Building
 
@@ -27,6 +29,12 @@ npm run tauri build    # installers land in target/release/bundle
 
 Requires Rust (stable, MSVC toolchain), Node 18 or newer, and the WebView2
 runtime, which ships with Windows 11.
+
+Run WinTilex through one of those two commands, or from the installer they
+build. A debug binary started on its own — `target\debug\wintilex.exe` — loads
+its interface from the Vite dev server rather than from disk, so without
+`npm run tauri dev` running alongside it the settings window is only a browser
+error page, and it keeps the console open for the logs.
 
 The window management can also be run on its own, without any UI:
 
@@ -99,6 +107,59 @@ The layout is picked per display, from the tray menu or with `Win`+`Alt`+`Space`
 Adding a new one means implementing `LayoutAlgorithm` in `crates/wintilex-core/src/layout`
 and adding a variant to `LayoutKind`; reporting the split edges is what lets a
 manual resize be folded back in.
+
+## Bar
+
+WinTilex can draw a bar along the top or bottom of every display, in the style
+of the ones that come with the tiling managers on Linux. It is off until you
+turn it on, from the *Bar* page in the settings window or the *Top bar* item in
+the tray menu; both write the choice to the config file, so it comes back the
+way you left it.
+
+| Module          | Shows                                                        |
+| --------------- | ------------------------------------------------------------ |
+| Layout          | The layout of this display. Click it for the next one.       |
+| Windows         | One pill per window, in tiling order. Click one to focus it. |
+| Focused title   | The title of the focused window, cut with an ellipsis.       |
+| Tiling paused   | Only while tiling is off. Click it to resume.                |
+| Display number  | Which display the bar belongs to.                            |
+| CPU, Memory     | Load and memory in use, read once a second.                  |
+| Battery         | Charge and whether it is plugged in. Hidden without one.     |
+| Clock           | `%H` `%I` `%M` `%S` `%p` `%d` `%m` `%y` `%Y` `%a` `%b`.       |
+
+Each module sits on the left, in the middle or on the right, and the order
+inside a side is the order they were put there. A side is drawn as one rounded
+group, and the three groups float clear of the screen edge rather than filling a
+strip: the bar window is layered and painted through `UpdateLayeredWindow`, so
+every pixel carries its own alpha and the wallpaper shows through the gaps with
+the corners antialiased.
+
+Icons come from *Segoe Fluent Icons*, which ships with Windows, so there is
+nothing to install. Point `icon-font` at a Nerd Font and paste its glyphs into
+the `glyphs` section to use those instead. `battery` and `battery-charging` are
+the first of ten glyphs running from empty to full.
+
+Every module has its own accent, which is where most of the character comes
+from: the icons are coloured while the text stays readable. Height, margin,
+corner radius, opacity, font and all thirteen colours are in the same file as
+everything else, and the shipped palette is a dark one in the style of the
+Linux tiling desktops the bar is modelled on.
+
+The bar registers itself with the shell as an appbar, which takes its strip out
+of the work area. Since the layouts are already computed against the work area,
+nothing else had to change for windows to stop under it — and maximized windows
+and `Win`+`Arrow` snapping keep off it too, which they would not if the bar
+merely floated on top. Turn *Reserve the space* off to get the floating
+behaviour anyway. The registration is given back when the bar is switched off or
+WinTilex quits; a bar left registered would leave a dead strip along the edge of
+the screen.
+
+The bar can be looked at without the rest of the application, on a desktop it is
+not laying out:
+
+```
+cargo run -p wintilex-bar --example preview -- 20
+```
 
 ## Configuration
 
