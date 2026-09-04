@@ -1,3 +1,10 @@
+# THIS PROJECT HAS BEEN ARCHIVED
+
+The maintainer no longer uses Windows, so this project is no longer actively maintained.
+
+If you're interested in becoming the new maintainer, contact: **[tuna@tunakilic.com](mailto:tuna@tunakilic.com)**
+
+
 <img src="assets/logo.svg" alt="" width="72" align="left" hspace="12">
 
 # WinTilex
